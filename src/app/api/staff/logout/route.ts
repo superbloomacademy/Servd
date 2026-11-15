@@ -1,0 +1,4 @@
+import { route } from '@/lib/api';
+import { endSession } from '@/lib/auth';
+
+export const POST = route(async () => { await endSession('staff'); return { ok: true }; });

@@ -1,0 +1,16 @@
+# dependencies & builds
+node_modules
+.next
+.next-prod
+next-env.d.ts
+tsconfig.tsbuildinfo
+.vercel
+
+# local database, uploads, logs
+.data
+*.log
+
+# secrets: never commit these (.env.example is safe and stays)
+.env
+.env.*
+!.env.example
