@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const BASE = 'http://localhost:3001';
-const OUT = process.argv[2] || '.data/scroll-audit';
+const OUT = path.resolve(process.argv[2] || '.data/scroll-audit');
 const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 const PORT = 9336;
 fs.mkdirSync(OUT, { recursive: true });
@@ -19,6 +19,7 @@ async function login(phone) {
 const edge = spawn(EDGE, ['--headless=new', `--remote-debugging-port=${PORT}`, `--user-data-dir=${path.join(OUT, '..', 'edge-prof4')}`, '--no-first-run', '--disable-gpu', 'about:blank'], { stdio: 'ignore' });
 let ws;
 for (let i = 0; i < 40; i++) { try { const j = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json(); const p = j.find(x => x.type === 'page'); if (p) { ws = p.webSocketDebuggerUrl; break; } } catch { /* starting */ } await sleep(250); }
+if (!ws) { console.error('Microsoft Edge did not start. Is it installed at ' + EDGE + '?'); edge.kill(); process.exit(1); }
 const sock = new WebSocket(ws);
 await new Promise(r => sock.addEventListener('open', r));
 let id = 0; const wait = new Map(); const errors = [];
