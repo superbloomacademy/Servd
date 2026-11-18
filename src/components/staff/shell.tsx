@@ -152,8 +152,9 @@ export function StaffShell() {
 
   return (
     <div style={brandVars(venue.brandColor)} className="min-h-dvh bg-soft lg:grid lg:grid-cols-[248px_1fr]">
+      {/* Side menu: the list of screens scrolls on its own, so the controls at the bottom are always reachable on short screens. */}
       <aside className="border-b border-line bg-white lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:border-r lg:border-b-0">
-        <div className="flex items-center gap-3 px-4 py-3 lg:py-5">
+        <div className="flex shrink-0 items-center gap-3 px-4 py-3 lg:py-4">
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand font-extrabold text-brand-ink">{v.vendor.name.slice(0, 1)}</div>
           <div className="min-w-0 flex-1">
             <p className="truncate font-bold">{v.vendor.name}</p>
@@ -163,9 +164,20 @@ export function StaffShell() {
               </select>
             ) : <p className="truncate text-xs text-muted">{venue.name}</p>}
           </div>
+          {/* Phones: the same controls as the bottom of the side menu, in the header. */}
+          {['owner', 'manager'].includes(role) && isOpen !== null && (
+            <button onClick={toggleOpen} className={`flex items-center gap-1 rounded-full px-2.5 py-1.5 text-xs font-bold lg:hidden ${isOpen ? 'bg-[#E7F6EF] text-[#11734E]' : 'bg-[#FDECEE] text-[#B42334]'}`}
+              aria-label={isOpen ? 'Taking orders. Tap to pause' : 'Orders paused. Tap to start'}>
+              {isOpen ? <Pause size={13} /> : <Play size={13} />}{isOpen ? 'Open' : 'Paused'}
+            </button>
+          )}
+          <button onClick={() => { setSound(s => !s); store.set('sv_sound', !sound); }} className="relative rounded-lg p-2 text-muted hover:bg-soft lg:hidden" aria-label={sound ? 'Sound on. Tap to mute' : 'Sound off. Tap to turn on'}>
+            {sound ? <Volume2 size={18} /> : <VolumeX size={18} />}
+            <span className={`absolute top-1.5 right-1.5 h-2 w-2 rounded-full ring-2 ring-white ${connected ? 'bg-good' : 'bg-faint'}`} title={connected ? 'Live' : 'Reconnecting'} />
+          </button>
           <button onClick={logout} className="rounded-lg p-2 text-muted hover:bg-soft lg:hidden" aria-label="Log out"><LogOut size={18} /></button>
         </div>
-        <nav className="no-scrollbar flex gap-1 overflow-x-auto px-3 pb-3 lg:flex-col lg:overflow-visible lg:pb-0">
+        <nav className="no-scrollbar side-scroll flex gap-1 overflow-x-auto px-3 pb-3 lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-x-hidden lg:overflow-y-auto">
           {nav.map(n => (
             <button key={n.key} onClick={() => go(n.key)} aria-current={tab === n.key ? 'page' : undefined}
               className={`flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold whitespace-nowrap transition ${tab === n.key ? 'bg-ink text-white' : 'text-ink-2 hover:bg-soft'}`}>
@@ -174,18 +186,20 @@ export function StaffShell() {
             </button>
           ))}
         </nav>
-        <div className="mt-auto hidden space-y-2 border-t border-line p-4 text-sm lg:block">
+        <div className="hidden shrink-0 space-y-2 border-t border-line p-3 text-sm lg:block">
           {me.staff.role === 'super_admin' && <a href="/admin" onClick={() => store.del('sv_admin_venue')} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 font-semibold text-ink-2 hover:bg-soft">← Back to super admin</a>}
           {['owner', 'manager'].includes(role) && isOpen !== null && (
             <button onClick={toggleOpen} className={`flex w-full items-center gap-2 rounded-xl px-3 py-2.5 font-semibold ${isOpen ? 'bg-[#E7F6EF] text-[#11734E]' : 'bg-[#FDECEE] text-[#B42334]'}`}>
               {isOpen ? <Pause size={16} /> : <Play size={16} />}{isOpen ? 'Taking orders' : 'Orders paused'}
             </button>
           )}
-          <button onClick={() => { setSound(s => !s); store.set('sv_sound', !sound); }} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-muted hover:bg-soft">
-            {sound ? <Volume2 size={16} /> : <VolumeX size={16} />}{sound ? 'Sound on' : 'Sound off'}
-          </button>
-          <p className="flex items-center gap-2 px-3 text-xs text-muted"><span className={`h-2 w-2 rounded-full ${connected ? 'bg-good' : 'bg-faint'}`} />{connected ? 'Live' : 'Reconnecting…'} · {me.staff.name}</p>
-          <button onClick={logout} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-muted hover:bg-soft"><LogOut size={16} />Log out</button>
+          <div className="flex items-center gap-1">
+            <p className="flex min-w-0 flex-1 items-center gap-2 px-2 text-xs text-muted"><span className={`h-2 w-2 shrink-0 rounded-full ${connected ? 'bg-good' : 'bg-faint'}`} /><span className="truncate">{connected ? 'Live' : 'Reconnecting…'} · {me.staff.name}</span></p>
+            <button onClick={() => { setSound(s => !s); store.set('sv_sound', !sound); }} className="rounded-lg p-2 text-muted hover:bg-soft" aria-label={sound ? 'Sound on. Click to mute' : 'Sound off. Click to turn on'} title={sound ? 'Sound on' : 'Sound off'}>
+              {sound ? <Volume2 size={17} /> : <VolumeX size={17} />}
+            </button>
+            <button onClick={logout} className="rounded-lg p-2 text-muted hover:bg-soft" aria-label="Log out" title="Log out"><LogOut size={17} /></button>
+          </div>
         </div>
       </aside>
 

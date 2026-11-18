@@ -48,6 +48,12 @@ h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.01em; text-wra
 .tabular { font-variant-numeric: tabular-nums; }
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
+/* Side menus on laptops: scroll on their own with a thin bar (overrides .no-scrollbar from 1024 px up). */
+@media (min-width: 1024px) {
+  .side-scroll { scrollbar-width: thin; scrollbar-color: #D6D7DB transparent; }
+  .side-scroll::-webkit-scrollbar { display: block; width: 6px; }
+  .side-scroll::-webkit-scrollbar-thumb { background: #D6D7DB; border-radius: 6px; }
+}
 .safe-bottom { padding-bottom: calc(env(safe-area-inset-bottom, 0px)); }
 
 @keyframes sheet-up { from { transform: translateY(24px); opacity: .6 } to { transform: none; opacity: 1 } }

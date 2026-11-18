@@ -72,7 +72,7 @@ export function SuperAdmin() {
   return (
     <div style={brandVars('#E23744')} className="min-h-dvh bg-soft lg:grid lg:grid-cols-[240px_1fr]">
       <aside className="border-b border-line bg-white lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:border-r lg:border-b-0">
-        <div className="flex items-center justify-between gap-3 px-5 py-3 lg:py-5">
+        <div className="flex shrink-0 items-center justify-between gap-3 px-5 py-3 lg:py-5">
           <div>
             <div className="text-[22px] leading-none font-extrabold" style={{ fontFamily: 'var(--font-display)' }}>servd<span className="text-brand">.</span></div>
             <p className="mt-1 text-xs font-semibold tracking-wide text-muted uppercase">Platform admin</p>
@@ -84,7 +84,7 @@ export function SuperAdmin() {
             <Plus size={17} />Onboard a vendor
           </button>
         </div>
-        <nav className="no-scrollbar flex gap-1 overflow-x-auto px-3 pb-3 lg:flex-col lg:overflow-visible lg:pb-0">
+        <nav className="no-scrollbar side-scroll flex gap-1 overflow-x-auto px-3 pb-3 lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-x-hidden lg:overflow-y-auto">
           {NAV.map(n => (
             <button key={n.key} onClick={() => go(n.key)} aria-current={active === n.key ? 'page' : undefined}
               className={`flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold whitespace-nowrap transition ${active === n.key ? 'bg-ink text-white' : 'text-ink-2 hover:bg-soft'}`}>
@@ -92,7 +92,7 @@ export function SuperAdmin() {
             </button>
           ))}
         </nav>
-        <div className="mt-auto hidden border-t border-line p-4 text-sm lg:block">
+        <div className="hidden shrink-0 border-t border-line p-4 text-sm lg:block">
           <p className="px-3 text-xs text-muted">Logged in as {me.name}</p>
           <button onClick={logout} className="mt-1 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-muted hover:bg-soft"><LogOut size={16} />Log out</button>
         </div>
