@@ -25,7 +25,7 @@ export default async function KotPage({ params, searchParams }: { params: Promis
         {kots.map(k => (
           <section key={k.id} className="mb-6 break-after-page">
             <p className="text-center font-sans text-[15px] font-bold">{v.vendor.name}</p>
-            <p className="text-center">KITCHEN ORDER TICKET</p>
+            <p className="text-center">KITCHEN ORDER TICKET{v.vendor.isDemo ? ' · DEMO' : ''}</p>
             <p className="text-center font-bold">{k.stationName.toUpperCase()}</p>
             <hr className="my-1.5 border-dashed border-black" />
             <div className="flex justify-between"><b>KOT #{o.kotNo}</b><span>{t(o.paidAt || o.createdAt)}</span></div>

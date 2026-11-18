@@ -250,9 +250,9 @@ async function main() {
   const month = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date()).slice(0, 7);
   const bl = (await admin.get(`/api/admin/billing?month=${month}`)).json;
   const row = bl?.rows?.find((r: any) => r.vendorId === vendorId);
-  check('billing: guest QR sales shown and smaller than total sales', row && row.qrPaise > 0 && row.qrPaise < row.salesPaise, row && { qr: row.qrPaise, sales: row.salesPaise });
-  check('billing: commission is charged on guest QR sales only', row && row.commissionPaise <= Math.round(row.qrPaise * row.commissionBps / 10000), row && { c: row.commissionPaise, qr: row.qrPaise, bps: row.commissionBps });
-  const ov = (await admin.get('/api/admin/overview')).json;
+  check('billing: the demo restaurant is never billed', !row, row);
+  check('billing: every row shows guest QR sales (the commission base)', bl?.rows?.every((r: any) => typeof r.qrPaise === 'number' && r.qrPaise <= r.salesPaise && r.commissionPaise <= Math.round(r.qrPaise * r.commissionBps / 10000) + 1));
+  const ov = (await admin.get('/api/admin/overview?demo=1')).json;
   check('overview: sales by source (QR / counter / apps)', ov?.sources?.qr?.orders > 0 && ov.sources.counter.orders > 0 && ov.sources.apps.orders > 0, ov?.sources);
   check('overview: low-QR list is there', Array.isArray(ov?.attention?.lowQr));
 

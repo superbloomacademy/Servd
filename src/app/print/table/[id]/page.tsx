@@ -26,6 +26,7 @@ export default async function TableBillPrint({ params }: { params: Promise<{ id:
       <PrintBar label={`${bill.spotLabel} · ₹${r(bill.totalPaise)}`} />
       <style>{`@page { size: 80mm auto; margin: 3mm } body { background: #fff }`}</style>
       <div className="mx-auto w-[74mm] py-4 font-mono text-[12px] leading-snug text-black">
+        {v.vendor.isDemo && <p className="mb-1 border-2 border-black text-center font-bold">SAMPLE BILL (DEMO) – NOT VALID</p>}
         <p className="text-center font-sans text-[15px] font-bold">{v.vendor.legalName || v.vendor.name}</p>
         {v.vendor.address && <p className="text-center">{v.vendor.address}</p>}
         {v.vendor.gstin && <p className="text-center">GSTIN: {v.vendor.gstin}</p>}

@@ -29,7 +29,7 @@ export const GET = route(async () => {
       const owner = owners.find(o => o.vendorId === v.id);
       const s = sales.find(x => x.vendorId === v.id);
       return {
-        id: v.id, name: v.name, brandColor: v.brandColor, logoUrl: v.logoUrl, status: v.status, stage: v.stage, liveAt: v.liveAt,
+        id: v.id, name: v.name, brandColor: v.brandColor, logoUrl: v.logoUrl, status: v.status, stage: v.stage, liveAt: v.liveAt, isDemo: v.isDemo,
         trialEndsAt: v.trialEndsAt, createdAt: v.createdAt, city: vs[0]?.city ?? '', types: [...new Set(vs.map(x => x.type))],
         owner: owner ? { name: owner.name, phone: owner.phone } : null, venues: vs.length,
         orders30: s?.orders ?? 0, sales30: s?.sales ?? 0, commissionBps: v.commissionBps, monthlyFeePaise: v.monthlyFeePaise,

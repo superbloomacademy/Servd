@@ -3,11 +3,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { Building2, ChevronRight, Plus, Search } from 'lucide-react';
 import { api, rupee } from '@/lib/client';
 import { Btn, Empty, Spinner } from '@/components/ui/kit';
-import { Logo, PageHead, Progress, TYPE_LABEL, VendorStatus, day, pct } from './common';
+import { DemoBadge, Logo, PageHead, Progress, TYPE_LABEL, VendorStatus, day, pct } from './common';
 import type { Nav } from './super-admin';
 
 type Row = {
-  id: string; name: string; brandColor: string; logoUrl: string | null; status: string; stage: string; liveAt: string | null; trialEndsAt: string | null;
+  isDemo?: boolean; id: string; name: string; brandColor: string; logoUrl: string | null; status: string; stage: string; liveAt: string | null; trialEndsAt: string | null;
   createdAt: string; city: string; types: string[]; owner: { name: string; phone: string } | null; venues: number;
   orders30: number; sales30: number; commissionBps: number; monthlyFeePaise: number; setup: { done: number; total: number; ready: boolean };
 };
@@ -52,7 +52,7 @@ export function Vendors({ nav }: { nav: Nav }) {
                   <span className="flex min-w-0 items-center gap-3">
                     <Logo name={v.name} color={v.brandColor} url={v.logoUrl} />
                     <span className="min-w-0">
-                      <span className="block truncate font-bold">{v.name}</span>
+                      <span className="flex items-center gap-2 font-bold"><span className="truncate">{v.name}</span>{v.isDemo && <DemoBadge />}</span>
                       <span className="block truncate text-xs text-muted">{[v.types.map(t => TYPE_LABEL[t]).join(', '), v.city, `${v.venues} venue${v.venues === 1 ? '' : 's'}`, v.owner && `${v.owner.name} · ${v.owner.phone}`].filter(Boolean).join(' · ')}</span>
                     </span>
                   </span>

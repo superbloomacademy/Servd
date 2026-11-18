@@ -1,8 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { AlertCircle, CalendarClock, ChevronRight, Hourglass, MessageCircleWarning, MoonStar, QrCode, Wrench } from 'lucide-react';
-import { api, rupee, rupeeShort, timeAgo } from '@/lib/client';
-import { Spinner } from '@/components/ui/kit';
+import { api, rupee, rupeeShort, store, timeAgo } from '@/lib/client';
+import { Spinner, Toggle } from '@/components/ui/kit';
 import { Bars } from '@/components/staff/dashboard';
 import { Card, Kpi, LEAD_STAGES, PageHead, day, todayISO } from './common';
 import type { Nav } from './super-admin';
@@ -15,6 +15,7 @@ type Data = {
   };
   days: { day: string; sales: number; orders: number }[];
   sources: { qr: Sum; counter: Sum; apps: Sum };
+  demo: { included: boolean; vendors: number };
   top: { venueId: string; venue: string; vendor: string; vendorId: string; sales: number; orders: number }[];
   attention: {
     followUps: { id: string; business: string; stage: string; nextFollowUp: string; phone: string }[];
@@ -29,7 +30,8 @@ type Data = {
 
 export function Overview({ nav }: { nav: Nav }) {
   const [d, setD] = useState<Data | null>(null);
-  useEffect(() => { api<Data>('/api/admin/overview').then(setD); }, []);
+  const [withDemo, setWithDemo] = useState(() => store.get('sv_admin_with_demo', false));
+  useEffect(() => { api<Data>(`/api/admin/overview${withDemo ? '?demo=1' : ''}`).then(setD); }, [withDemo]);
   if (!d) return <div className="grid place-items-center py-24"><Spinner className="text-muted" /></div>;
   const { kpi, attention: a } = d;
   const items = a.followUps.length + a.setup.length + a.quiet.length + a.tickets.length + a.trialsEnding.length + a.lowQr.length + (kpi.unpaidEarlier.n ? 1 : 0);
@@ -37,7 +39,14 @@ export function Overview({ nav }: { nav: Nav }) {
 
   return (
     <div>
-      <PageHead title="Overview" sub="All venues on the platform. Sales are paid orders only, from guest QR and from staff billing." />
+      <PageHead title="Overview" sub={`All ${d.demo.included ? '' : 'real '}venues on the platform. Sales are paid orders only, from guest QR and from staff billing.`}
+        right={d.demo.vendors > 0 ? (
+          <label className="flex items-center gap-2 rounded-xl border border-line bg-white px-3 py-2 text-sm font-semibold">
+            Include {d.demo.vendors} demo vendor{d.demo.vendors === 1 ? '' : 's'}
+            <Toggle on={withDemo} onChange={() => { store.set('sv_admin_with_demo', !withDemo); setWithDemo(!withDemo); }} label="Include demo vendors" />
+          </label>
+        ) : undefined} />
+      {d.demo.included && <p className="mb-4 rounded-xl border border-dashed border-[#E8C08A] bg-[#FFF8EC] px-4 py-2.5 text-sm text-[#7A4A00]">Numbers below <b>include demo sample data</b>. Switch it off for your real figures.</p>}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="Sales today" value={rupee(kpi.today.sales)} sub={`${kpi.today.orders} orders`} />
         <Kpi label="Last 7 days" value={rupeeShort(kpi.week.sales)} sub={`${kpi.week.orders} orders`} />

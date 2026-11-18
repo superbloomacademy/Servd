@@ -42,7 +42,7 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
   const { vendor: v, venue } = (await db().select({ vendor: schema.vendors, venue: schema.venues }).from(schema.venues)
     .innerJoin(schema.vendors, eq(schema.venues.vendorId, schema.vendors.id)).where(eq(schema.venues.id, inv.venueId)))[0];
   const half = inv.taxBps / 200;
-  const supply = inv.taxBps > 0 && v.gstin ? 'TAX INVOICE' : 'BILL OF SUPPLY';
+  const supply = v.isDemo ? 'SAMPLE BILL (DEMO) – NOT A VALID TAX INVOICE' : inv.taxBps > 0 && v.gstin ? 'TAX INVOICE' : 'BILL OF SUPPLY';
   const at = new Date(inv.issuedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' });
 
   return (

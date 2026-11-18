@@ -1,15 +1,31 @@
-// Demo data: a super admin and four vendors, one per venue type, each with its own brand,
-// menu, stations, staff logins, coupons and ~2 weeks of past orders (marked by note "[demo]").
-// All demo staff log in with PIN 1234.
-import { eq, sql } from 'drizzle-orm';
+// Demo data: four sample vendors, one per venue type, each with its own brand, menu, stations, staff logins,
+// coupons and ~2 weeks of past orders (note "[demo]"). They are flagged isDemo: marked "Demo" everywhere,
+// left out of platform totals and never billed.
+// - On this PC (demo mode) they are created on first start, with a super admin and sample leads; PIN 1234.
+// - On the live site the super admin creates / refreshes / removes them from Admin → Demo, with a 6-digit PIN.
+import { eq, inArray, sql } from 'drizzle-orm';
 import { db, schema } from './index';
 import { defaultSettings, type ServiceMode, type VenueType } from './schema';
 import { hashPin, parseRows, randomCode } from '../lib/util';
-import { issueForOrder } from '../lib/invoices';
+import { fyOf, invoicePrefix } from '../lib/invoices';
+// Note: don't import lib/orders here. This file also runs at start-up and in the Vercel build, outside the web server.
+
+/** Same maths as computeTotals in lib/orders: GST after discount, optional round-off to the rupee. */
+function totals(subtotal: number, discount: number, taxBps: number, roundOff: boolean) {
+  const tax = Math.round(Math.max(0, subtotal - discount) * taxBps / 10000);
+  const raw = subtotal - discount + tax;
+  const total = roundOff ? Math.round(raw / 100) * 100 : raw;
+  return { tax, roundOff: total - raw, total };
+}
 
 type MenuSpec = Record<string, { station: string; items: [string, number, boolean, string, string[]?][] }>;
 
-const PIN = hashPin('1234');
+const LOCAL_PIN = hashPin('1234');
+let STAFF_PIN = LOCAL_PIN;
+
+/** Staff phone numbers used by the demo vendors (they must be free before demo data is created). */
+export const DEMO_PHONES = ['9000000001', '9000000011', '9000000012', '9000000013', '9000000014', '9000000002', '9000000021', '9000000022', '9000000023', '9000000024',
+  '9000000003', '9000000031', '9000000033', '9000000032', '9000000004', '9000000041'];
 
 export async function seedIfEmpty() {
   // Live (production) setup: no demo data. Only our own super admin login, from ADMIN_PHONE / ADMIN_PIN in .env.
@@ -28,8 +44,14 @@ export async function seedIfEmpty() {
   const n = await db().select({ n: sql<number>`count(*)::int` }).from(schema.vendors);
   if (n[0].n > 0) return;
   console.log('  Adding demo vendors, menus and staff…');
-  await db().insert(schema.staff).values({ name: 'Platform Admin', phone: '9000000000', pinHash: PIN, role: 'super_admin' });
+  await db().insert(schema.staff).values({ name: 'Platform Admin', phone: '9000000000', pinHash: LOCAL_PIN, role: 'super_admin' });
+  await seedDemoVendors(LOCAL_PIN);
+  await sampleLeads();
+}
 
+/** The four sample vendors (all marked as demo). pinHash = the PIN every demo login uses. */
+export async function seedDemoVendors(pinHash: string) {
+  STAFF_PIN = pinHash;
   // ---------------- Theater
   await vendor({
     vendor: { name: 'Aurora Cinemas', slug: 'aurora', brandColor: '#6D28D9', legalName: 'Aurora Cinemas Pvt Ltd', gstin: '36AABCA1234F1Z5', fssai: '13623001000123', address: 'Kukatpally, Hyderabad', commissionBps: 300 },
@@ -137,7 +159,10 @@ export async function seedIfEmpty() {
     coupons: [],
   });
 
-  // ---------------- Sales pipeline (super admin → Leads)
+}
+
+// ---------------- Sales pipeline (super admin → Leads), only on this PC
+async function sampleLeads() {
   const day = (n: number) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(Date.now() + n * 864e5));
   await db().insert(schema.leads).values([
     { business: 'Sri Venkateswara Talkies', contactName: 'Mr. Rao', phone: '9848012345', city: 'Warangal', type: 'theater', stage: 'demo', source: 'Walk-in', notes: 'Single screen, 600 seats. Wants interval-only delivery.', nextFollowUp: day(1) },
@@ -162,7 +187,7 @@ type VendorSpec = {
 
 async function vendor(spec: VendorSpec) {
   const d = db();
-  const [v] = await d.insert(schema.vendors).values({ stage: 'live', liveAt: new Date(Date.now() - 45 * 864e5), ...spec.vendor }).returning();
+  const [v] = await d.insert(schema.vendors).values({ stage: 'live', liveAt: new Date(Date.now() - 45 * 864e5), ...spec.vendor, isDemo: true }).returning();
   const [venue] = await d.insert(schema.venues).values({
     ...spec.venue, vendorId: v.id, address: spec.vendor.address, openTime: '00:00', closeTime: '00:00', // demo: open 24 h
     settings: { ...defaultSettings, acceptCash: true },
@@ -213,9 +238,9 @@ async function vendor(spec: VendorSpec) {
   }
 
   // Staff
-  await d.insert(schema.staff).values({ name: `${v.name} Owner`, phone: spec.ownerPhone, pinHash: PIN, role: 'owner', vendorId: v.id });
+  await d.insert(schema.staff).values({ name: `${v.name} Owner`, phone: spec.ownerPhone, pinHash: STAFF_PIN, role: 'owner', vendorId: v.id });
   for (const [name, phone, role, station] of spec.staff) {
-    await d.insert(schema.staff).values({ name, phone, pinHash: PIN, role, vendorId: v.id, venueId: venue.id, stationId: station ? stationIds[station] : null });
+    await d.insert(schema.staff).values({ name, phone, pinHash: STAFF_PIN, role, vendorId: v.id, venueId: venue.id, stationId: station ? stationIds[station] : null });
   }
 
   for (const [code, type, value, maxD, minO, perC, description] of spec.coupons) {
@@ -223,7 +248,7 @@ async function vendor(spec: VendorSpec) {
   }
 
   await demoExtras(venue, itemRows);
-  await sampleOrders(venue, spotIds, itemRows);
+  await sampleOrders(venue, itemRows);
 }
 
 // Demo of sizes, add-ons, round-off and inventory, so the POS features are visible straight away.
@@ -275,60 +300,106 @@ async function demoExtras(venue: typeof schema.venues.$inferSelect, itemRows: (t
 }
 
 
-// Two weeks of delivered orders so dashboards and "Most ordered" have real numbers.
-async function sampleOrders(venue: typeof schema.venues.$inferSelect, spotIds: string[], itemRows: (typeof schema.items.$inferSelect)[]) {
+// Two weeks of past orders so dashboards, reports and "Most ordered" have real-looking numbers.
+// Mostly guest QR orders, plus counter billing and (restaurant) a few Zomato orders, like a real venue.
+// Everything is built in memory and saved in a few large inserts (fast on the live database too).
+async function sampleOrders(venue: typeof schema.venues.$inferSelect, itemRows: (typeof schema.items.$inferSelect)[]) {
   const d = db();
+  const vendor = (await d.select().from(schema.vendors).where(eq(schema.vendors.id, venue.vendorId)))[0];
   const names = ['Ravi', 'Priya', 'Arjun', 'Sneha', 'Kiran', 'Meera', 'Vikram', 'Anjali', 'Rahul', 'Divya', 'Naveen', 'Pooja'];
-  const custIds: string[] = [];
-  for (const [i, name] of names.entries()) {
-    const phone = '81' + String(10000000 + i * 7919 + venue.name.length * 101).slice(-8);
-    const r = await d.insert(schema.customers).values({ phone, name }).onConflictDoNothing().returning({ id: schema.customers.id });
-    if (r[0]) custIds.push(r[0].id);
-    else custIds.push((await d.select({ id: schema.customers.id }).from(schema.customers).where(sql`phone = ${phone}`))[0].id);
-  }
+  const people = names.map((name, i) => ({ name, phone: '81' + String(10000000 + i * 7919 + venue.name.length * 101).slice(-8) }));
+  await d.insert(schema.customers).values(people).onConflictDoNothing();
+  const custRows = await d.select({ id: schema.customers.id, phone: schema.customers.phone, name: schema.customers.name }).from(schema.customers)
+    .where(inArray(schema.customers.phone, people.map(p => p.phone)));
+  const spotRows = await d.select({ s: schema.spots, area: schema.areas.name }).from(schema.spots)
+    .leftJoin(schema.areas, eq(schema.spots.areaId, schema.areas.id)).where(eq(schema.spots.venueId, venue.id));
+  const label = (r: (typeof spotRows)[number]) => r.s.kind === 'seat' ? `${r.area ? r.area + ' · ' : ''}Seat ${r.s.label}` : r.s.kind === 'table' ? `Table ${r.s.label}` : r.s.label;
+
   // Popular items are picked more often; some items pair naturally (popcorn + cola).
-  const weighted = itemRows.flatMap(it => Array(it.tags.includes('bestseller') ? 6 : it.tags.includes('must_try') ? 3 : 1).fill(it));
+  const simple = itemRows.filter(it => !it.variants.length && !it.addonGroups.length);
+  const weighted = simple.flatMap(it => Array(it.tags.includes('bestseller') ? 6 : it.tags.includes('must_try') ? 3 : 1).fill(it));
   const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
   const counters: Record<string, number> = {};
   const per = venue.type === 'stall' ? 14 : venue.type === 'restaurant' ? 8 : 10;
+  const tables = venue.serviceMode === 'table_bill' || venue.serviceMode === 'table_prepay';
 
+  type Line = { it: (typeof itemRows)[number]; qty: number };
+  const draft: { order: typeof schema.orders.$inferInsert; lines: Line[]; cust: (typeof custRows)[number] }[] = [];
   for (let day = 13; day >= 0; day--) {
     for (let k = 0; k < per + Math.floor(Math.random() * 6); k++) {
       const created = new Date(Date.now() - day * 864e5 - Math.random() * 10 * 3600e3);
       if (created > new Date(Date.now() - 20 * 60e3)) continue;
       const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(created);
       counters[date] = (counters[date] || 0) + 1;
-      const lines = new Map<string, { it: typeof itemRows[number]; qty: number }>();
-      const count = 1 + Math.floor(Math.random() * 3);
-      for (let j = 0; j < count; j++) {
+      const lines = new Map<string, Line>();
+      for (let j = 0; j < 1 + Math.floor(Math.random() * 3); j++) {
         const it = pick(weighted);
         lines.set(it.id, { it, qty: (lines.get(it.id)?.qty || 0) + 1 });
-        // natural pairing
-        const pair = itemRows.find(x => (it.name.includes('Popcorn') && x.name.startsWith('Cola')) || (it.name.includes('Biryani') && x.name.includes('Lassi')) || (it.name.includes('Naan') && x.name === 'Butter Chicken') || (it.name.includes('Sandwich') && x.name === 'Cappuccino') || (it.name === 'Pani Puri (6)' && x.name === 'Masala Soda'));
+        const pair = simple.find(x => (it.name.includes('Popcorn') && x.name.startsWith('Cola')) || (it.name.includes('Biryani') && x.name.includes('Lassi')) || (it.name.includes('Naan') && x.name === 'Butter Chicken') || (it.name.includes('Sandwich') && x.name === 'Cappuccino') || (it.name === 'Pani Puri (6)' && x.name === 'Masala Soda'));
         if (pair && Math.random() < 0.6) lines.set(pair.id, { it: pair, qty: (lines.get(pair.id)?.qty || 0) + 1 });
       }
+      // Where it came from: guests by QR most of the time; counter billing at restaurants / cafés / stalls; a few Zomato at the restaurant.
+      const r = Math.random();
+      const channel: 'qr' | 'pos' | 'zomato' = venue.type === 'restaurant' && r < 0.06 ? 'zomato' : venue.type !== 'theater' && r < 0.28 ? 'pos' : 'qr';
+      const m = Math.random();
+      const payMethod: 'cash' | 'upi_shop' | 'card' | 'online' = channel === 'zomato' ? 'online'
+        : m < (venue.type === 'stall' ? 0.35 : 0.2) ? 'cash' : channel === 'pos' && venue.type !== 'stall' && m > 0.85 ? 'card' : 'upi_shop';
       const subtotal = [...lines.values()].reduce((s, l) => s + l.it.pricePaise * l.qty, 0);
       const tax = Math.round(subtotal * venue.taxBps / 10000);
-      const cash = Math.random() < (venue.type === 'stall' ? 0.35 : 0.2);
-      const payMethod = venue.serviceMode === 'table_bill' ? (cash ? 'cash' : 'upi_shop') : cash ? 'cash' : 'upi_shop';
+      const t = totals(subtotal, 0, venue.taxBps, venue.settings.roundOff === true);
       const done = new Date(created.getTime() + (8 + Math.random() * 12) * 60e3);
-      const [o] = await d.insert(schema.orders).values({
-        venueId: venue.id, vendorId: venue.vendorId, customerId: pick(custIds), spotId: pick(spotIds), kotNo: counters[date], businessDate: date,
-        status: 'delivered', payStatus: 'paid', payMethod: payMethod as 'cash' | 'upi_shop', paidAt: created,
-        fulfilment: venue.serviceMode === 'seat_delivery' ? 'seat' : venue.serviceMode.startsWith('table') ? 'table' : 'pickup',
-        spotLabel: 'Demo', subtotalPaise: subtotal, taxPaise: tax, totalPaise: subtotal + tax, note: '[demo]',
-        timeline: [{ status: 'confirmed', at: created.toISOString() }, { status: 'ready', at: new Date(done.getTime() - 120e3).toISOString() }, { status: 'delivered', at: done.toISOString() }],
-        createdAt: created,
-      }).returning();
-      await d.insert(schema.orderItems).values([...lines.values()].map(l => ({ orderId: o.id, itemId: l.it.id, stationId: l.it.stationId, name: l.it.name, pricePaise: l.it.pricePaise, qty: l.qty, veg: l.it.veg })));
-      await d.insert(schema.kots).values({ orderId: o.id, venueId: venue.id, stationName: 'Kitchen', status: 'ready', createdAt: created, startedAt: created, readyAt: done });
+      const spot = channel === 'qr' || tables ? pick(spotRows) : null;
+      const cust = pick(custRows);
+      const ref = `Z${String(1000 + Math.floor(Math.random() * 9000))}`;
+      draft.push({
+        cust, lines: [...lines.values()],
+        order: {
+          venueId: venue.id, vendorId: venue.vendorId, customerId: channel === 'zomato' ? null : cust.id, spotId: channel === 'zomato' ? null : spot?.s.id ?? null,
+          kotNo: counters[date], businessDate: date, status: 'delivered', payStatus: 'paid', payMethod, paidAt: created, channel,
+          payments: [{ method: payMethod, amountPaise: t.total }], externalRef: channel === 'zomato' ? ref : null,
+          fulfilment: channel === 'zomato' ? 'delivery' : venue.serviceMode === 'seat_delivery' ? 'seat' : tables ? 'table' : 'pickup',
+          spotLabel: channel === 'zomato' ? `Zomato #${ref}` : spot ? label(spot) : 'Takeaway',
+          subtotalPaise: subtotal, taxPaise: tax, roundOffPaise: t.roundOff, totalPaise: t.total, note: '[demo]',
+          timeline: [{ status: 'confirmed', at: created.toISOString() }, { status: 'ready', at: new Date(done.getTime() - 120e3).toISOString() }, { status: 'delivered', at: done.toISOString() }],
+          createdAt: created,
+        },
+      });
     }
   }
-  // GST bills for the demo orders, numbered in the order they were paid.
-  const paid = await d.select({ id: schema.orders.id, paidAt: schema.orders.paidAt }).from(schema.orders).where(sql`venue_id = ${venue.id}`).orderBy(schema.orders.paidAt);
-  for (const p of paid) await issueForOrder(p.id, p.paidAt ?? new Date());
-  // Keep today's KOT counter in step with the demo orders.
-  for (const [date, last] of Object.entries(counters)) {
-    await d.insert(schema.dailyCounters).values({ venueId: venue.id, date, kind: 'kot', last }).onConflictDoNothing();
+  draft.sort((a, b) => +a.order.createdAt! - +b.order.createdAt!);
+
+  // Save orders, their lines and KOTs in a few big inserts.
+  const saved: (typeof schema.orders.$inferSelect)[] = [];
+  for (let i = 0; i < draft.length; i += 200) saved.push(...await d.insert(schema.orders).values(draft.slice(i, i + 200).map(x => x.order)).returning());
+  const items = saved.flatMap((o, i) => draft[i].lines.map(l => ({ orderId: o.id, itemId: l.it.id, stationId: l.it.stationId, name: l.it.name, pricePaise: l.it.pricePaise, qty: l.qty, veg: l.it.veg })));
+  for (let i = 0; i < items.length; i += 500) await d.insert(schema.orderItems).values(items.slice(i, i + 500));
+  const kots = saved.map(o => ({ orderId: o.id, venueId: venue.id, stationName: 'Kitchen', status: 'ready' as const, createdAt: o.createdAt, startedAt: o.createdAt,
+    readyAt: new Date(o.createdAt.getTime() + 12 * 60e3) }));
+  for (let i = 0; i < kots.length; i += 500) await d.insert(schema.kots).values(kots.slice(i, i + 500));
+
+  // GST bills, numbered in the order they were paid (per vendor, per financial year), like the live app does.
+  const prefix = invoicePrefix(vendor);
+  const seqByFy: Record<string, number> = {};
+  const bills = saved.map((o, i) => {
+    const fy = fyOf(o.paidAt!);
+    const seq = (seqByFy[fy] = (seqByFy[fy] || 0) + 1);
+    const cgst = Math.floor(o.taxPaise / 2);
+    const lineMap = new Map<string, schema.InvoiceLine>();
+    for (const l of draft[i].lines) lineMap.set(l.it.id, { name: l.it.name, qty: l.qty, pricePaise: l.it.pricePaise, veg: l.it.veg });
+    return {
+      vendorId: vendor.id, venueId: venue.id, orderId: o.id, customerId: o.customerId, fy, seq,
+      number: `${prefix}/${fy.slice(2, 4)}${fy.slice(5)}/${String(seq).padStart(5, '0')}`, kotNos: [o.kotNo], spotLabel: o.spotLabel,
+      customerName: o.customerId ? draft[i].cust.name : '', customerPhone: o.customerId ? draft[i].cust.phone : '',
+      lines: [...lineMap.values()], subtotalPaise: o.subtotalPaise, discountPaise: 0, taxablePaise: o.subtotalPaise, taxBps: venue.taxBps,
+      cgstPaise: cgst, sgstPaise: o.taxPaise - cgst, roundOffPaise: o.roundOffPaise, totalPaise: o.totalPaise,
+      payMethod: o.payMethod!, payments: o.payments, issuedAt: o.paidAt!,
+    };
+  });
+  for (let i = 0; i < bills.length; i += 300) await d.insert(schema.invoices).values(bills.slice(i, i + 300));
+  for (const [fy, last] of Object.entries(seqByFy)) {
+    await d.insert(schema.invoiceCounters).values({ vendorId: vendor.id, fy, last })
+      .onConflictDoUpdate({ target: [schema.invoiceCounters.vendorId, schema.invoiceCounters.fy], set: { last: sql`greatest(${schema.invoiceCounters.last}, ${last})` } });
   }
+  // Keep each day's KOT counter in step with the demo orders.
+  await d.insert(schema.dailyCounters).values(Object.entries(counters).map(([date, last]) => ({ venueId: venue.id, date, kind: 'kot', last }))).onConflictDoNothing();
 }

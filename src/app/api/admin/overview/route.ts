@@ -6,13 +6,15 @@ import { localParts } from '@/lib/util';
 import { isSale, monthlyDues, thisMonth } from '@/lib/admin';
 
 // Super admin home: platform numbers, sales trend, and the list of things that need us today.
-export const GET = route(async () => {
+export const GET = route(async req => {
   await requireStaff(['super_admin']);
+  // Demo vendors (for pitches) are left out of every number unless ?demo=1.
+  const withDemo = new URL(req.url).searchParams.get('demo') === '1';
   const d = db();
   const today = localParts().date;
   const startToday = new Date(`${today}T00:00:00+05:30`);
   const since = (days: number) => new Date(startToday.getTime() - (days - 1) * 864e5);
-  const paid = isSale();
+  const paid = withDemo ? isSale() : and(isSale(), sql`${schema.orders.vendorId} not in (select id from vendors where is_demo)`);
 
   const sum = async (from: Date) => (await d.select({
     orders: sql<number>`count(*)::int`, sales: sql<number>`coalesce(sum(${schema.orders.totalPaise}),0)::int`,
@@ -29,8 +31,9 @@ export const GET = route(async () => {
     return { day, sales: r?.sales ?? 0, orders: r?.orders ?? 0 };
   });
 
-  const vendors = await d.select().from(schema.vendors);
-  const venues = await d.select().from(schema.venues);
+  const allVendors = await d.select().from(schema.vendors);
+  const vendors = allVendors.filter(v => withDemo || !v.isDemo);
+  const venues = (await d.select().from(schema.venues)).filter(v => vendors.some(x => x.id === v.vendorId));
   const customers = (await d.select({ n: sql<number>`count(*)::int`, recent: sql<number>`(count(*) filter (where ${schema.customers.createdAt} >= ${since(30)}))::int` }).from(schema.customers))[0];
 
   const top = await d.select({ venueId: schema.orders.venueId, sales: sql<number>`sum(${schema.orders.totalPaise})::int`, orders: sql<number>`count(*)::int` })
@@ -79,7 +82,7 @@ export const GET = route(async () => {
       venues: venues.length, customers: customers.n, newCustomers: customers.recent,
       monthDue, unpaidEarlier: unpaid,
     },
-    days, sources,
+    days, sources, demo: { included: withDemo, vendors: allVendors.filter(v => v.isDemo).length },
     top: top.map(r => ({ ...r, ...venueName(r.venueId) })),
     attention: {
       followUps: followUps.map(l => ({ id: l.id, business: l.business, stage: l.stage, nextFollowUp: l.nextFollowUp, phone: l.phone })),

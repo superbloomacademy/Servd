@@ -50,6 +50,11 @@ export function Card({ title, right, children, className = '' }: { title?: React
   );
 }
 
+/** Sample vendor for pitches. Shown next to its name everywhere in admin. */
+export function DemoBadge() {
+  return <span className="inline-flex items-center rounded-md border border-dashed border-[#9A5500] bg-[#FFF3E0] px-1.5 py-0.5 text-[11px] font-bold tracking-wide text-[#9A5500] uppercase">Demo</span>;
+}
+
 export function VendorStatus({ status, stage }: { status: string; stage: string }) {
   if (status === 'suspended') return <Pill tone="bad">Suspended</Pill>;
   if (stage === 'setup') return <Pill tone="warn">Setting up</Pill>;

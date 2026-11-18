@@ -98,7 +98,7 @@ for (const [w, h, mobile] of sizes) {
   // Super admin
   await cmd('Network.clearBrowserCookies');
   await cmd('Network.setCookie', { name: 'sv_s', value: await login('9000000000'), url: BASE });
-  for (const t of ['overview', 'leads', 'vendors', 'billing', 'customers', 'support', 'activity', 'onboard']) {
+  for (const t of ['overview', 'leads', 'vendors', 'billing', 'customers', 'support', 'activity', 'onboard', 'demo']) {
     await go(`${BASE}/admin?tab=${t}`, 2500);
     const issues = await js(MEASURE) || ['(could not measure)'];
     const line = `${w}x${h} · super admin · ${t}: ${issues.length ? issues.join(' | ') : 'OK'}`;

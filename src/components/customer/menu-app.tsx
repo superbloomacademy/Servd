@@ -120,7 +120,7 @@ export function MenuApp({ code }: { code: string }) {
               ? <img src={vendor.logoUrl} alt="" className="h-12 w-12 shrink-0 rounded-xl border border-line object-cover" />
               : <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brand text-lg font-extrabold text-brand-ink">{vendor.name.slice(0, 1)}</div>}
             <div className="min-w-0">
-              <h1 className="truncate text-[22px] leading-tight font-extrabold">{vendor.name}</h1>
+              <h1 className="flex items-center gap-2 text-[22px] leading-tight font-extrabold"><span className="truncate">{vendor.name}</span>{vendor.isDemo && <span className="shrink-0 rounded-md border border-dashed border-[#9A5500] bg-[#FFF3E0] px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-[#9A5500] uppercase" title="Sample venue for demonstrations">Demo</span>}</h1>
               <p className="truncate text-[13px] text-muted">{venue.name}</p>
             </div>
           </div>

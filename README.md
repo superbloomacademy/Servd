@@ -23,6 +23,7 @@ Stop with **Ctrl+C**.
 | `npm run test:e2e` | Full end-to-end test, 147 checks: every route, live updates, security. Needs testing mode: start the app with `EMAIL_PROVIDER=off npm start` (after `npm run build`) |
 | `npm run db:migrate` | Update database tables (Vercel runs this automatically on every deploy) |
 | `npm run test:login` | Customer email-OTP login test, 18 checks |
+| `npm run test:demo` | Demo-for-pitches test, 28 checks: create / refresh / remove the demo vendors, PIN rules, kept out of totals and billing, Demo marks. Ends with a fresh demo (PIN 1234) |
 | `npm run test:scroll` | Opens every screen of every role (and super admin) in Edge at laptop and phone sizes and checks nothing is cut off or stuck. Report in `.data/scroll-audit/` |
 | `npm run test:pos` | Billing (POS) + admin modules test, 101 checks: billing screen, sizes/add-ons, tables, split payment, discounts, cancellations, cash drawer, inventory, reports. Uses the demo restaurant; same testing mode as above |
 
@@ -111,6 +112,16 @@ Everything a restaurant expects from billing software like Petpooja, next to the
 - **Round-off** to the rupee (Settings). Commission applies only to orders guests place by QR.
 - **Super admin** (18 Nov): commission is calculated on guest QR orders only (Billing shows the "Guest QR" base, the monthly bill explains it); **modules per vendor** (Billing & cash drawer, Inventory, Customers) can be switched on/off in the vendor's Plan tab or during onboarding, and the staff app and API follow; each venue shows **usage** (share of guest QR / counter / Zomato-Swiggy orders, last order, stock, cash drawer); Overview shows sales **by order source** and warns when a live venue gets few guest QR orders.
 - Roles: captains can order and take payment; discounts and item cancellations are for owner / manager / cashier; Inventory and Customers for owner / manager.
+
+## Demo venues for pitches (18 Nov 2026)
+
+Super admin → **Demo for pitches**: create, **refresh** or remove four sample vendors (theater, restaurant, café, food stall) with menus, staff logins and two weeks of orders (guest QR, counter and Zomato, cash / UPI / card). Works on the live site too:
+- choose a 6-digit PIN for all demo logins (the live site refuses easy PINs); on this PC 1234 is fine
+- each venue shows a QR to scan with your phone, a guest-menu link, its staff screens and its logins
+- **refresh before every pitch**: sample orders run up to today and orders placed during earlier pitches are cleared (takes about 1–2 s here; allowed up to 60 s on Vercel)
+- demo vendors are flagged `isDemo`: a "Demo" badge in admin, a banner on every staff screen, a "Demo" label on the guest menu, "SAMPLE BILL (DEMO) – NOT A VALID TAX INVOICE" on bills, "DEMO" on KOTs and the Z report
+- they are left out of the Overview (switch "Include demo vendors" to see them), never billed, and removing them deletes all their data and sample customers; real vendors are untouched
+- they use staff numbers 9000000001–9000000041, so those numbers can't be real logins
 
 ## Automatic KOT printing
 

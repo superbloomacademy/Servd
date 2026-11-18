@@ -1,7 +1,7 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Activity as ActivityIcon, BadgeIndianRupee, Building2, Headset, LayoutDashboard, LogOut, Plus, Target, Users } from 'lucide-react';
+import { Activity as ActivityIcon, BadgeIndianRupee, Building2, Headset, LayoutDashboard, LogOut, Plus, Presentation, Target, Users } from 'lucide-react';
 import { api, store } from '@/lib/client';
 import { brandVars } from '@/lib/theme';
 import { Spinner } from '@/components/ui/kit';
@@ -14,8 +14,9 @@ import { Billing } from './billing';
 import { Customers } from './customers';
 import { SupportDesk } from './support';
 import { ActivityLog } from './activity';
+import { DemoAdmin } from './demo';
 
-export type Tab = 'overview' | 'leads' | 'vendors' | 'onboard' | 'billing' | 'customers' | 'support' | 'activity';
+export type Tab = 'overview' | 'leads' | 'vendors' | 'onboard' | 'billing' | 'customers' | 'support' | 'activity' | 'demo';
 export type Nav = { go: (tab: Tab, opts?: { vendor?: string | null; prefill?: OnboardPrefill }) => void; openVenue: (venueId: string) => void };
 
 const NAV: { key: Tab; label: string; icon: React.ComponentType<{ size?: number }> }[] = [
@@ -26,8 +27,9 @@ const NAV: { key: Tab; label: string; icon: React.ComponentType<{ size?: number 
   { key: 'customers', label: 'Customers', icon: Users },
   { key: 'support', label: 'Support', icon: Headset },
   { key: 'activity', label: 'Activity log', icon: ActivityIcon },
+  { key: 'demo', label: 'Demo for pitches', icon: Presentation },
 ];
-const TABS = new Set<Tab>(['overview', 'leads', 'vendors', 'onboard', 'billing', 'customers', 'support', 'activity']);
+const TABS = new Set<Tab>(['overview', 'leads', 'vendors', 'onboard', 'billing', 'customers', 'support', 'activity', 'demo']);
 
 // Super admin console (us, the platform): sales pipeline, vendors, onboarding, billing, customers, support.
 // The current screen lives in the URL (?tab=…&vendor=…) so refresh and the back button work.
@@ -108,6 +110,7 @@ export function SuperAdmin() {
           {tab === 'customers' && <Customers />}
           {tab === 'support' && <SupportDesk nav={nav} />}
           {tab === 'activity' && <ActivityLog />}
+          {tab === 'demo' && <DemoAdmin nav={nav} />}
         </div>
       </main>
     </div>

@@ -5,7 +5,7 @@ import { api, rupee, timeAgo } from '@/lib/client';
 import { Btn, Field, Pill, Sheet, Spinner, Toggle, inputCls } from '@/components/ui/kit';
 import { useConfirm, useToast } from '@/components/ui/providers';
 import { ROLE_LABEL } from '@/lib/roles';
-import { Card, DEFAULT_MODE, Kpi, Logo, MODES_FOR, MODE_LABEL, PageHead, Progress, TYPE_LABEL, VendorStatus, day, makePin, pct } from './common';
+import { Card, DEFAULT_MODE, DemoBadge, Kpi, Logo, MODES_FOR, MODE_LABEL, PageHead, Progress, TYPE_LABEL, VendorStatus, day, makePin, pct } from './common';
 import type { Nav } from './super-admin';
 
 type Step = { key: string; label: string; hint: string; done: boolean; required: boolean };
@@ -14,7 +14,7 @@ type Vendor = {
   id: string; name: string; brandColor: string; logoUrl: string | null; legalName: string | null; gstin: string | null; fssai: string | null;
   address: string | null; phone: string | null; email: string | null; contactName: string | null; invoicePrefix: string | null; invoicePrefixShown: string;
   commissionBps: number; monthlyFeePaise: number; trialEndsAt: string | null; status: 'active' | 'suspended'; stage: 'setup' | 'live';
-  liveAt: string | null; notes: string; createdAt: string; features: Features;
+  liveAt: string | null; notes: string; createdAt: string; features: Features; isDemo: boolean;
 };
 type Features = { pos: boolean; inventory: boolean; customers: boolean };
 type Src = { orders: number; sales: number };
@@ -66,7 +66,7 @@ export function VendorDetail({ id, nav }: { id: string; nav: Nav }) {
       <div className="mb-5 flex flex-wrap items-center gap-4">
         <Logo name={v.name} color={v.brandColor} url={v.logoUrl} size={56} />
         <div className="min-w-0 flex-1">
-          <h1 className="flex flex-wrap items-center gap-2 text-2xl font-extrabold">{v.name}<VendorStatus status={v.status} stage={v.stage} /></h1>
+          <h1 className="flex flex-wrap items-center gap-2 text-2xl font-extrabold">{v.name}<VendorStatus status={v.status} stage={v.stage} />{v.isDemo && <DemoBadge />}</h1>
           <p className="text-sm text-muted">{[v.legalName, owner && `Owner ${owner.name} · ${owner.phone}`, `Joined ${day(v.createdAt)}`].filter(Boolean).join(' · ')}</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -76,6 +76,7 @@ export function VendorDetail({ id, nav }: { id: string; nav: Nav }) {
         </div>
       </div>
 
+      {v.isDemo && <p className="mb-4 rounded-xl border border-dashed border-[#E8C08A] bg-[#FFF8EC] px-4 py-2.5 text-sm text-[#7A4A00]"><b>Demo vendor</b> with sample data, for showing Servd in pitches. Not counted in platform totals and never billed. Manage it from <b>Demo</b> in the menu.</p>}
       <div className="no-scrollbar mb-4 flex gap-1 overflow-x-auto border-b border-line">
         {TABS.map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} className={`-mb-px shrink-0 border-b-2 px-3 py-2.5 text-sm font-semibold ${tab === k ? 'border-ink text-ink' : 'border-transparent text-muted hover:text-ink'}`}>

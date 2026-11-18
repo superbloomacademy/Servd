@@ -204,6 +204,11 @@ export function StaffShell() {
       </aside>
 
       <main className="min-w-0 px-4 py-5 sm:px-6 lg:py-7">
+        {v.vendor.isDemo && (
+          <p className="mb-4 rounded-xl border border-dashed border-[#E8C08A] bg-[#FFF8EC] px-3.5 py-2 text-[13px] text-[#7A4A00]">
+            <b className="mr-1.5 rounded border border-dashed border-[#9A5500] px-1 text-[11px] tracking-wide uppercase">Demo</b>Sample venue with sample data, for showing how Servd works. Orders and bills here are not real.
+          </p>
+        )}
         {tab === 'setup' && <GetStarted venue={venue} isOwner={role === 'owner'} onLive={() => api<Me>('/api/staff/me').then(setMe)}
           go={t => { if (nav.some(n => n.key === t)) go(t as Tab); else toast('Ask the owner to do this step.', 'bad'); }} />}
         {tab === 'gst' && <GstBills venue={venue} isOwner={role === 'owner'} />}

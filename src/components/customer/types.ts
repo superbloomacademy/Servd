@@ -1,4 +1,4 @@
-export type Vendor = { name: string; logoUrl: string | null; brandColor: string; legalName: string | null; gstin: string | null; fssai: string | null; address: string | null };
+export type Vendor = { name: string; logoUrl: string | null; brandColor: string; legalName: string | null; gstin: string | null; fssai: string | null; address: string | null; isDemo?: boolean };
 export type Venue = {
   id: string; name: string; type: 'theater' | 'restaurant' | 'cafe' | 'stall';
   serviceMode: 'seat_delivery' | 'table_bill' | 'table_prepay' | 'counter_token' | 'shop_qr';

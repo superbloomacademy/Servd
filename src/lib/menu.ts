@@ -23,7 +23,7 @@ export async function venueMenu(venueId: string) {
 }
 
 export function publicVendor(v: typeof schema.vendors.$inferSelect) {
-  return { name: v.name, logoUrl: v.logoUrl, brandColor: v.brandColor, legalName: v.legalName, gstin: v.gstin, fssai: v.fssai, address: v.address };
+  return { name: v.name, logoUrl: v.logoUrl, brandColor: v.brandColor, legalName: v.legalName, gstin: v.gstin, fssai: v.fssai, address: v.address, isDemo: v.isDemo };
 }
 export function publicVenue(v: typeof schema.venues.$inferSelect) {
   return {

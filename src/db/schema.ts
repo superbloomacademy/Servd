@@ -33,6 +33,8 @@ export const vendors = pgTable('vendors', {
   notes: text('notes').notNull().default(''), // internal notes, only super admin sees them
   // Plan modules the vendor may use. A missing key means ON (so older vendors keep everything).
   features: jsonb('features').$type<Partial<VendorFeatures>>().notNull().default({}),
+  // Sample vendor for pitches: marked "Demo" everywhere, left out of platform totals and never billed.
+  isDemo: boolean('is_demo').notNull().default(false),
   createdAt: created(),
 });
 export type VendorFeatures = { pos: boolean; inventory: boolean; customers: boolean };

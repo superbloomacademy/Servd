@@ -31,7 +31,7 @@ export default async function DayReportPrint({ params, searchParams }: { params:
       <div className="mx-auto w-[74mm] py-4 font-mono text-[12px] leading-snug text-black">
         <p className="text-center font-sans text-[15px] font-bold">{v.vendor.name}</p>
         <p className="text-center">{v.venue.name}</p>
-        <p className="text-center font-bold">DAY-END (Z) REPORT</p>
+        <p className="text-center font-bold">DAY-END (Z) REPORT{v.vendor.isDemo ? ' · DEMO DATA' : ''}</p>
         <p className="text-center">{rep.from}{rep.to !== rep.from ? ` to ${rep.to}` : ''}</p>
         <p className="text-center text-[10px]">Printed {new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })} by {s.name}</p>
         <Hr />

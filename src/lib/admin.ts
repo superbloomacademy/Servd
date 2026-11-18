@@ -41,7 +41,7 @@ export async function monthlyDues(month: string): Promise<Map<string, VendorDue>
     .groupBy(schema.orders.vendorId);
   const out = new Map<string, VendorDue>();
   for (const v of vendors) {
-    if (v.createdAt >= end) continue;
+    if (v.createdAt >= end || v.isDemo) continue;   // demo vendors are never billed
     const r = rows.find(x => x.vendorId === v.id);
     const sales = r?.sales ?? 0, cash = r?.cash ?? 0;
     const commission = Math.round((r?.chargeable ?? 0) * v.commissionBps / 10000);
