@@ -23,6 +23,7 @@ Stop with **Ctrl+C**.
 | `npm run test:e2e` | Full end-to-end test, 147 checks: every route, live updates, security. Needs testing mode: start the app with `EMAIL_PROVIDER=off npm start` (after `npm run build`) |
 | `npm run db:migrate` | Update database tables (Vercel runs this automatically on every deploy) |
 | `npm run test:login` | Customer email-OTP login test, 18 checks |
+| `npm run test:scroll` | Opens every screen of every role (and super admin) in Edge at laptop and phone sizes and checks nothing is cut off or stuck. Report in `.data/scroll-audit/` |
 | `npm run test:pos` | Billing (POS) + admin modules test, 101 checks: billing screen, sizes/add-ons, tables, split payment, discounts, cancellations, cash drawer, inventory, reports. Uses the demo restaurant; same testing mode as above |
 
 **On your phone:** connect it to the same Wi-Fi and open the address printed at start-up (e.g. `http://192.168.1.7:3001`).
