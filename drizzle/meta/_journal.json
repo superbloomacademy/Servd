@@ -36,6 +36,13 @@
       "when": 1794914093940,
       "tag": "0004_pos_variants_inventory",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794962553570,
+      "tag": "0005_plan_features",
+      "breakpoints": true
     }
   ]
 }

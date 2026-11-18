@@ -53,7 +53,7 @@ export const POST = route(async req => {
     const n = (await db().select({ n: sql<number>`count(*)::int` }).from(schema.platformBills).where(like(schema.platformBills.number, `SV-${b.month.replace('-', '').slice(2)}-%`)))[0].n;
     [bill] = await db().insert(schema.platformBills).values({
       vendorId: b.vendorId, month: b.month, number: `SV-${b.month.replace('-', '').slice(2)}-${String(n + 1).padStart(3, '0')}`,
-      orders: due.orders, salesPaise: due.salesPaise, onlinePaise: due.onlinePaise, cashPaise: due.cashPaise,
+      orders: due.orders, salesPaise: due.salesPaise, qrPaise: due.qrPaise, onlinePaise: due.onlinePaise, cashPaise: due.cashPaise,
       commissionBps: due.commissionBps, commissionPaise: due.commissionPaise, feePaise: due.feePaise, totalPaise: due.totalPaise,
     }).returning();
   }

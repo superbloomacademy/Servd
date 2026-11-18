@@ -62,6 +62,7 @@ const New = z.object({
   commissionBps: z.number().int().min(0).max(3000).default(0),
   monthlyFeePaise: z.number().int().min(0).max(10_000_000).default(0),
   trialDays: z.number().int().min(0).max(365).default(0),
+  features: z.object({ pos: z.boolean(), inventory: z.boolean(), customers: z.boolean() }).partial().default({}),
   leadId: z.string().uuid().nullish(),
 });
 
@@ -79,7 +80,7 @@ export const POST = route(async req => {
       legalName: b.legalName || null, contactName: b.contactName || b.ownerName, phone: b.businessPhone || phone, email: b.email || null,
       gstin: b.gstin || null, fssai: b.fssai || null, address: b.address || null,
       commissionBps: b.commissionBps, monthlyFeePaise: b.monthlyFeePaise,
-      trialEndsAt: b.trialDays ? new Date(Date.now() + b.trialDays * 864e5) : null, stage: 'setup',
+      trialEndsAt: b.trialDays ? new Date(Date.now() + b.trialDays * 864e5) : null, stage: 'setup', features: b.features,
     }).returning();
     const [venue] = await tx.insert(schema.venues).values({
       vendorId: v.id, name: b.venueName, slug: `${slugify(b.venueName)}-${randomCode(4)}`, type: b.type, serviceMode: b.serviceMode,

@@ -56,6 +56,21 @@ export const GET = route(async () => {
   });
   const trialsEnding = vendors.filter(v => v.trialEndsAt && v.trialEndsAt > new Date() && v.trialEndsAt < new Date(Date.now() + 7 * 864e5));
 
+  // Where orders come from (30 days): guests by QR (our commission), staff at the counter, delivery apps.
+  const byChannel = await d.select({ venueId: schema.orders.venueId, channel: schema.orders.channel, orders: sql<number>`count(*)::int`, sales: sql<number>`sum(${schema.orders.totalPaise})::int` })
+    .from(schema.orders).where(and(paid, gte(schema.orders.paidAt, since(30)))).groupBy(schema.orders.venueId, schema.orders.channel);
+  const bucket = (c: string) => (c === 'qr' ? 'qr' : c === 'zomato' || c === 'swiggy' || c === 'other' ? 'apps' : 'counter');
+  const sources = { qr: { orders: 0, sales: 0 }, counter: { orders: 0, sales: 0 }, apps: { orders: 0, sales: 0 } };
+  for (const r of byChannel) { const b = sources[bucket(r.channel)]; b.orders += r.orders; b.sales += r.sales || 0; }
+  // Live venues that bill a lot themselves but get few guest QR orders: our commission is at risk.
+  const lowQr = venues.flatMap(v => {
+    const vd = vendors.find(x => x.id === v.vendorId);
+    if (vd?.stage !== 'live' || vd.status !== 'active') return [];
+    const rows = byChannel.filter(r => r.venueId === v.id);
+    const all = rows.reduce((a, r) => a + r.orders, 0), qr = rows.filter(r => r.channel === 'qr').reduce((a, r) => a + r.orders, 0);
+    return all >= 20 && qr / all < 0.25 ? [{ venueId: v.id, share: Math.round((qr / all) * 100), orders: all }] : [];
+  });
+
   const venueName = (id: string) => { const v = venues.find(x => x.id === id); const vd = vendors.find(x => x.id === v?.vendorId); return { venue: v?.name ?? '', vendor: vd?.name ?? '', vendorId: vd?.id ?? '' }; };
   return {
     kpi: {
@@ -64,7 +79,7 @@ export const GET = route(async () => {
       venues: venues.length, customers: customers.n, newCustomers: customers.recent,
       monthDue, unpaidEarlier: unpaid,
     },
-    days,
+    days, sources,
     top: top.map(r => ({ ...r, ...venueName(r.venueId) })),
     attention: {
       followUps: followUps.map(l => ({ id: l.id, business: l.business, stage: l.stage, nextFollowUp: l.nextFollowUp, phone: l.phone })),
@@ -73,6 +88,7 @@ export const GET = route(async () => {
       tickets: oldTickets.map(r => ({ id: r.t.id, topic: r.t.topic, venue: r.venue ?? '', createdAt: r.t.createdAt })),
       trialsEnding: trialsEnding.map(v => ({ id: v.id, name: v.name, trialEndsAt: v.trialEndsAt })),
       suspended: vendors.filter(v => v.status === 'suspended').map(v => ({ id: v.id, name: v.name })),
+      lowQr: lowQr.map(l => ({ ...l, ...venueName(l.venueId) })),
     },
   };
 });

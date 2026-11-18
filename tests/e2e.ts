@@ -83,7 +83,7 @@ async function main() {
   check('owner phone already in use is refused', dup.json?.code === 'phone_taken', dup.json);
   const ob = await admin.post('/api/admin/vendors', {
     vendorName: `Test Chaat ${rnd(9999)}`, legalName: 'Test Foods LLP', venueName: 'Test Chaat, Ameerpet', type: 'stall', serviceMode: 'shop_qr',
-    city: 'Hyderabad', taxBps: 500, ownerName: 'Ravi Owner', ownerPhone, ownerPin: '4821', commissionBps: 200, monthlyFeePaise: 49900, trialDays: 0, openTime: '00:00', closeTime: '00:00', // open 24 h so the test works at any hour
+    city: 'Hyderabad', taxBps: 500, ownerName: 'Ravi Owner', ownerPhone, ownerPin: '4821', commissionBps: 200, monthlyFeePaise: 49900, trialDays: 0, openTime: '00:00', closeTime: '00:00', features: { customers: false }, // open 24 h so the test works at any hour
     leadId: lead.json.lead.id,
   });
   check('vendor onboarded', ob.json?.vendor?.id && ob.json.venue?.id, ob.json);
@@ -95,6 +95,7 @@ async function main() {
 
   section('Owner sets up the venue');
   check('owner logs in with the PIN from onboarding', (await owner.post('/api/staff/login', { phone: ownerPhone, pin: '4821' })).json?.role === 'owner');
+  check('module chosen at onboarding: no customer list', (await owner.get(`/api/staff/v/${venueId}/customers`)).status === 403 && (await owner.get('/api/staff/me')).json?.venues?.[0]?.vendor?.features?.customers === false);
   const me = await owner.get('/api/staff/me');
   check('owner sees the venue, still in setup', me.json?.venues?.[0]?.id === venueId && me.json.venues[0].vendor.stage === 'setup', me.json);
   let setup = await owner.get(`/api/staff/v/${venueId}/setup`);

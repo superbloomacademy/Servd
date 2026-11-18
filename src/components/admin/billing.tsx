@@ -9,7 +9,7 @@ import type { Nav } from './super-admin';
 
 type Bill = { id: string; number: string; totalPaise: number; status: 'due' | 'paid' | 'waived'; paidAt: string | null; reference: string | null };
 type Row = {
-  vendorId: string; vendorName: string; brandColor: string; vendorStatus: string; orders: number; salesPaise: number; onlinePaise: number; cashPaise: number;
+  vendorId: string; vendorName: string; brandColor: string; vendorStatus: string; orders: number; salesPaise: number; qrPaise: number; onlinePaise: number; cashPaise: number;
   commissionBps: number; commissionPaise: number; feePaise: number; totalPaise: number; trialNote: string | null; bill: Bill | null;
 };
 type Data = { month: string; label: string; isCurrent: boolean; rows: Row[]; totals: { sales: number; due: number; collected: number; waived: number } };
@@ -42,7 +42,7 @@ export function Billing({ nav }: { nav: Nav }) {
 
   return (
     <div>
-      <PageHead title="Billing" sub="What each vendor owes the platform: commission on paid orders plus any monthly fee. Vendors keep all customer money; they pay us this bill."
+      <PageHead title="Billing" sub="What each vendor owes the platform: commission on orders guests place by QR, plus any monthly fee. Orders their staff bill at the counter carry no commission. Vendors keep all customer money; they pay us this bill."
         right={
           <div className="flex items-center gap-1 rounded-xl bg-white p-1">
             <button className="rounded-lg p-2 hover:bg-soft" aria-label="Previous month" onClick={() => load(shift(d.month, -1))}><ChevronLeft size={18} /></button>
@@ -61,7 +61,7 @@ export function Billing({ nav }: { nav: Nav }) {
       <div className="overflow-x-auto rounded-2xl bg-white">
         <table className="w-full min-w-[820px] text-sm">
           <thead><tr className="border-b border-line text-left text-xs text-muted">
-            <th className="px-4 py-2.5 font-semibold">Vendor</th><th className="px-2 text-right font-semibold">Sales</th><th className="px-2 text-right font-semibold">Cash</th>
+            <th className="px-4 py-2.5 font-semibold">Vendor</th><th className="px-2 text-right font-semibold">Sales</th><th className="px-2 text-right font-semibold">Guest QR<span className="block font-normal">commission base</span></th>
             <th className="px-2 text-right font-semibold">Commission</th><th className="px-2 text-right font-semibold">Fee</th><th className="px-2 text-right font-semibold">Total</th>
             <th className="px-2 font-semibold">Status</th><th className="px-4" />
           </tr></thead>
@@ -77,7 +77,7 @@ export function Billing({ nav }: { nav: Nav }) {
                     </button>
                   </td>
                   <td className="tabular px-2 text-right">{rupee(r.salesPaise)}</td>
-                  <td className="tabular px-2 text-right text-muted">{r.salesPaise ? Math.round((r.cashPaise / r.salesPaise) * 100) : 0}%</td>
+                  <td className="tabular px-2 text-right">{rupee(r.qrPaise)}<span className="block text-xs text-muted">{r.salesPaise ? Math.round((r.qrPaise / r.salesPaise) * 100) : 0}% of sales</span></td>
                   <td className="tabular px-2 text-right">{rupee(r.commissionPaise)}<span className="block text-xs text-muted">{pct(r.commissionBps)}</span></td>
                   <td className="tabular px-2 text-right">{rupee(r.feePaise)}</td>
                   <td className="tabular px-2 text-right font-bold">{rupee(r.bill?.totalPaise ?? r.totalPaise)}{r.bill && r.bill.totalPaise !== r.totalPaise && <span className="block text-[11px] font-normal text-muted">recorded</span>}</td>

@@ -3,11 +3,13 @@ import { db, schema } from '@/db';
 import { route } from '@/lib/api';
 import { requireVenueAccess } from '@/lib/auth';
 import { CAN } from '@/lib/roles';
+import { requireFeature } from '@/lib/vendor-access';
 
 // Customer list for the owner's business (all its venues): visits, spend, last visit, favourite item.
 // Everyone who ordered by QR, or gave a phone number at the counter. Paid, non-refunded orders only.
 export const GET = route<{ venueId: string }>(async (req, { venueId }) => {
   await requireVenueAccess(venueId, CAN.customers);
+  await requireFeature(venueId, 'customers');
   const v = (await db().select({ vendorId: schema.venues.vendorId }).from(schema.venues).where(eq(schema.venues.id, venueId)))[0];
   const q = (new URL(req.url).searchParams.get('q') || '').trim().slice(0, 40);
   const like = `%${q.replace(/[%_\\]/g, '')}%`;

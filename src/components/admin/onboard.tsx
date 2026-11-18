@@ -30,7 +30,7 @@ export function Onboard({ nav, prefill }: { nav: Nav; prefill?: OnboardPrefill }
     gstin: '', fssai: '', address: '', brandColor: '#E23744',
     venueName: '', type: type0, serviceMode: DEFAULT_MODE[type0], city: prefill?.city || '', taxBps: 500, openTime: '10:00', closeTime: '23:00', allDay: false, upiId: '',
     ownerName: prefill?.ownerName || '', ownerPhone: prefill?.ownerPhone || '', ownerPin: makePin(),
-    commission: '2', fee: '0', trialDays: 30,
+    commission: '2', fee: '0', trialDays: 30, features: { pos: true, inventory: true, customers: true },
   });
   const set = <K extends keyof typeof f>(k: K, val: (typeof f)[K]) => { setF(p => ({ ...p, [k]: val })); setErr(''); };
   const inp = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => set(k, e.target.value as never);
@@ -60,7 +60,7 @@ export function Onboard({ nav, prefill }: { nav: Nav; prefill?: OnboardPrefill }
       const r = await api<Omit<Created, 'pin'>>('/api/admin/vendors', {
         body: {
           ...f, gstin: f.gstin.toUpperCase(), openTime: f.allDay ? '00:00' : f.openTime, closeTime: f.allDay ? '00:00' : f.closeTime,
-          commissionBps: Math.round(Number(f.commission) * 100), monthlyFeePaise: Math.round(Number(f.fee) * 100), leadId: prefill?.leadId ?? null,
+          commissionBps: Math.round(Number(f.commission) * 100), monthlyFeePaise: Math.round(Number(f.fee) * 100), leadId: prefill?.leadId ?? null, features: f.features,
         },
       });
       setDone({ ...r, pin: f.ownerPin }); window.scrollTo(0, 0);
@@ -168,7 +168,7 @@ export function Onboard({ nav, prefill }: { nav: Nav; prefill?: OnboardPrefill }
           <div className="space-y-4">
             <h2 className="text-lg font-bold">What they pay us</h2>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Commission per paid order (%)" hint="e.g. 2 = ₹2 on a ₹100 order"><input className={inputCls} inputMode="decimal" value={f.commission} onChange={e => set('commission', e.target.value.replace(/[^\d.]/g, ''))} /></Field>
+              <Field label="Commission on guest QR orders (%)" hint="e.g. 2 = ₹2 on a ₹100 order. Orders their staff bill at the counter are free."><input className={inputCls} inputMode="decimal" value={f.commission} onChange={e => set('commission', e.target.value.replace(/[^\d.]/g, ''))} /></Field>
               <Field label="Monthly fee (₹)" hint="0 = no monthly fee"><input className={inputCls} inputMode="numeric" value={f.fee} onChange={e => set('fee', e.target.value.replace(/[^\d.]/g, ''))} /></Field>
             </div>
             <div>
@@ -178,8 +178,17 @@ export function Onboard({ nav, prefill }: { nav: Nav; prefill?: OnboardPrefill }
               ))}</div>
               <p className="mt-1.5 text-xs text-muted">During the trial we charge no commission and no monthly fee.</p>
             </div>
+            <div>
+              <p className="mb-1.5 text-[13px] font-semibold text-ink-2">Modules <span className="font-normal text-muted">· guest QR ordering, KOTs, tables, reports and GST bills are always included</span></p>
+              <div className="flex flex-wrap gap-2">
+                {([['pos', 'Billing (POS) & cash drawer'], ['inventory', 'Inventory'], ['customers', 'Customer list']] as const).map(([k, l]) => (
+                  <button key={k} type="button" aria-pressed={f.features[k]} onClick={() => set('features', { ...f.features, [k]: !f.features[k] })}
+                    className={`rounded-full border px-4 py-2 text-sm font-semibold ${f.features[k] ? 'border-ink bg-ink text-white' : 'border-line text-muted hover:bg-soft'}`}>{f.features[k] ? '✓ ' : ''}{l}</button>
+                ))}
+              </div>
+            </div>
             <div className="rounded-xl bg-soft p-4 text-sm">
-              <b>Example:</b> at ₹50,000 sales a month they would pay {rupee(Math.round(5_000_000 * Number(f.commission || 0) / 100))} commission{Number(f.fee) ? ` + ${rupee(Number(f.fee) * 100)} fee` : ''} = <b>{rupee(Math.round(5_000_000 * Number(f.commission || 0) / 100) + Number(f.fee || 0) * 100)}</b> a month{f.trialDays ? `, starting after ${f.trialDays} free days` : ''}.
+              <b>Example:</b> at ₹50,000 of guest QR orders a month they would pay {rupee(Math.round(5_000_000 * Number(f.commission || 0) / 100))} commission{Number(f.fee) ? ` + ${rupee(Number(f.fee) * 100)} fee` : ''} = <b>{rupee(Math.round(5_000_000 * Number(f.commission || 0) / 100) + Number(f.fee || 0) * 100)}</b> a month{f.trialDays ? `, starting after ${f.trialDays} free days` : ''}.
             </div>
           </div>
         )}
@@ -193,7 +202,7 @@ export function Onboard({ nav, prefill }: { nav: Nav; prefill?: OnboardPrefill }
               <Item k="First venue" v={<>{f.venueName} · {TYPE_LABEL[f.type]}{f.city ? `, ${f.city}` : ''}<span className="block text-muted">{MODE_LABEL[f.serviceMode]} · GST {f.taxBps / 100}%</span></>} onEdit={() => setStep(1)} />
               <Item k="Hours / UPI" v={`${f.allDay ? 'Open 24 hours' : `${hhmm(f.openTime)} – ${hhmm(f.closeTime)}`} · ${f.upiId || 'UPI later'}`} onEdit={() => setStep(1)} />
               <Item k="Owner login" v={<>{f.ownerName} · +91 {f.ownerPhone}<span className="block text-muted">PIN {f.ownerPin}</span></>} onEdit={() => setStep(2)} />
-              <Item k="Plan" v={`${f.commission}% per order${Number(f.fee) ? ` + ₹${f.fee}/month` : ''}${f.trialDays ? ` · ${f.trialDays}-day free trial` : ''}`} onEdit={() => setStep(3)} />
+              <Item k="Plan" v={`${f.commission}% per QR order${Number(f.fee) ? ` + ₹${f.fee}/month` : ''}${f.trialDays ? ` · ${f.trialDays}-day free trial` : ''}${Object.values(f.features).every(Boolean) ? ' · all modules' : ` · modules: ${[f.features.pos && 'Billing', f.features.inventory && 'Inventory', f.features.customers && 'Customers'].filter(Boolean).join(', ') || 'QR only'}`}`} onEdit={() => setStep(3)} />
             </dl>
           </div>
         )}

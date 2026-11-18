@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, Check, Circle, Copy, ExternalLink, KeyRound, MessageCircle, Plus, Power, Rocket, Undo2 } from 'lucide-react';
 import { api, rupee, timeAgo } from '@/lib/client';
-import { Btn, Field, Pill, Sheet, Spinner, inputCls } from '@/components/ui/kit';
+import { Btn, Field, Pill, Sheet, Spinner, Toggle, inputCls } from '@/components/ui/kit';
 import { useConfirm, useToast } from '@/components/ui/providers';
 import { ROLE_LABEL } from '@/lib/roles';
 import { Card, DEFAULT_MODE, Kpi, Logo, MODES_FOR, MODE_LABEL, PageHead, Progress, TYPE_LABEL, VendorStatus, day, makePin, pct } from './common';
@@ -14,9 +14,12 @@ type Vendor = {
   id: string; name: string; brandColor: string; logoUrl: string | null; legalName: string | null; gstin: string | null; fssai: string | null;
   address: string | null; phone: string | null; email: string | null; contactName: string | null; invoicePrefix: string | null; invoicePrefixShown: string;
   commissionBps: number; monthlyFeePaise: number; trialEndsAt: string | null; status: 'active' | 'suspended'; stage: 'setup' | 'live';
-  liveAt: string | null; notes: string; createdAt: string;
+  liveAt: string | null; notes: string; createdAt: string; features: Features;
 };
-type Venue = { id: string; name: string; type: string; serviceMode: string; city: string | null; isOpen: boolean; upiId: string | null; taxBps: number; sales30: { orders: number; sales: number; cash: number }; checklist: Checklist };
+type Features = { pos: boolean; inventory: boolean; customers: boolean };
+type Src = { orders: number; sales: number };
+type Usage = { qr: Src; counter: Src; apps: Src; lastOrderAt: string | null; materials: number; drawerDays: number };
+type Venue = { id: string; name: string; type: string; serviceMode: string; city: string | null; isOpen: boolean; upiId: string | null; taxBps: number; sales30: { orders: number; sales: number; cash: number }; checklist: Checklist; usage: Usage };
 type Member = { id: string; name: string; phone: string; role: keyof typeof ROLE_LABEL; venueName: string; active: boolean; createdAt: string };
 type Bill = { id: string; month: string; number: string; totalPaise: number; status: string; paidAt: string | null; reference: string | null };
 type Entry = { id: number; action: string; staffName: string | null; at: string };
@@ -99,7 +102,7 @@ function VenuesTab({ d, nav, reload }: { d: Data; nav: Nav; reload: () => Promis
   const toast = useToast();
   const confirm = useConfirm();
   const [add, setAdd] = useState<{ name: string; type: string; serviceMode: string; city: string; taxBps: number } | null>(null);
-  const total = d.venues.reduce((a, x) => ({ sales: a.sales + (x.sales30.sales || 0), orders: a.orders + x.sales30.orders, cash: a.cash + (x.sales30.cash || 0) }), { sales: 0, orders: 0, cash: 0 });
+  const total = d.venues.reduce((a, x) => ({ sales: a.sales + (x.sales30.sales || 0), orders: a.orders + x.sales30.orders, cash: a.cash + (x.sales30.cash || 0), qr: a.qr + x.usage.qr.sales }), { sales: 0, orders: 0, cash: 0, qr: 0 });
   const create = async () => {
     if (!add) return;
     if (!(await confirm({ title: `Add “${add.name}” to ${d.vendor.name}?`, body: 'The owner sees the new branch in their venue switcher and sets up its menu, QR codes and staff.', confirm: 'Add venue', tone: 'primary' }))) return;
@@ -110,8 +113,8 @@ function VenuesTab({ d, nav, reload }: { d: Data; nav: Nav; reload: () => Promis
     <>
       <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="Sales · 30 days" value={rupee(total.sales)} sub={`${total.orders} paid orders`} />
-        <Kpi label="Cash share" value={total.sales ? `${Math.round((total.cash / total.sales) * 100)}%` : '—'} sub="rest is UPI to the venue" />
-        <Kpi label="Our commission · 30 days" value={rupee(Math.round(total.sales * d.vendor.commissionBps / 10000))} sub={pct(d.vendor.commissionBps)} />
+        <Kpi label="Guest QR share" value={total.sales ? `${Math.round((total.qr / total.sales) * 100)}%` : '—'} sub={`${rupee(total.qr)} ordered by guests`} />
+        <Kpi label="Our commission · 30 days" value={rupee(Math.round(total.qr * d.vendor.commissionBps / 10000))} sub={`${pct(d.vendor.commissionBps)} of guest QR orders${d.vendor.trialEndsAt && new Date(d.vendor.trialEndsAt) > new Date() ? ' · trial: not charged' : ''}`} />
         <Kpi label="Venues" value={String(d.venues.length)} sub={`${d.team.filter(m => m.active).length} active logins`} />
       </div>
       <Card title="Venues" right={<Btn size="sm" tone="outline" onClick={() => setAdd({ name: '', type: d.venues[0]?.type || 'restaurant', serviceMode: DEFAULT_MODE[d.venues[0]?.type || 'restaurant'], city: d.venues[0]?.city || '', taxBps: 500 })}><Plus size={14} />Add a branch</Btn>}>
@@ -121,6 +124,7 @@ function VenuesTab({ d, nav, reload }: { d: Data; nav: Nav; reload: () => Promis
               <div className="min-w-0 flex-1">
                 <p className="flex flex-wrap items-center gap-2 font-semibold">{x.name}{!x.isOpen && <Pill tone="warn">Orders paused</Pill>}</p>
                 <p className="text-xs text-muted">{[TYPE_LABEL[x.type], MODE_LABEL[x.serviceMode], x.city, `GST ${x.taxBps / 100}%`, x.upiId ? `UPI ${x.upiId}` : 'No UPI ID yet'].filter(Boolean).join(' · ')}</p>
+                <UsageLine u={x.usage} f={d.vendor.features} />
               </div>
               <Progress done={x.checklist.done} total={x.checklist.total} />
               <div className="tabular w-32 text-right text-sm"><b>{rupee(x.sales30.sales || 0)}</b><span className="block text-xs text-muted">{x.sales30.orders} orders · 30 d</span></div>
@@ -261,6 +265,25 @@ function LoginsTab({ team, reload }: { team: Member[]; reload: () => Promise<unk
   );
 }
 
+// How a venue actually uses Servd (last 30 days): where orders come from, and which modules are in use.
+function UsageLine({ u, f }: { u: Usage; f: Features }) {
+  const all = u.qr.orders + u.counter.orders + u.apps.orders;
+  const share = (x: Src) => (all ? Math.round((x.orders / all) * 100) : 0);
+  const lowQr = all >= 20 && share(u.qr) < 25;
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[11px]">
+      {all ? <>
+        <Pill tone={lowQr ? 'warn' : 'brand'}>Guest QR {share(u.qr)}%</Pill>
+        {u.counter.orders > 0 && <Pill>Counter {share(u.counter)}%</Pill>}
+        {u.apps.orders > 0 && <Pill>Zomato / Swiggy {share(u.apps)}%</Pill>}
+      </> : <Pill tone="neutral">No orders in 30 days</Pill>}
+      <span className="text-muted">Last order {u.lastOrderAt ? timeAgo(u.lastOrderAt) : 'never'}</span>
+      {f.inventory && <span className="text-muted">· Stock {u.materials ? `${u.materials} materials` : 'not set up'}</span>}
+      {f.pos && <span className="text-muted">· Cash drawer {u.drawerDays ? `used ${u.drawerDays}×` : 'not used'}</span>}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- plan & bills
 function PlanTab({ v, bills, save, nav }: { v: Vendor; bills: Bill[]; save: (b: Record<string, unknown>, m: string) => Promise<boolean>; nav: Nav }) {
   const confirm = useConfirm();
@@ -270,19 +293,20 @@ function PlanTab({ v, bills, save, nav }: { v: Vendor; bills: Bill[]; save: (b: 
   const bps = Math.round(Number(f.commission) * 100), fee = Math.round(Number(f.fee) * 100);
   const valid = Number.isFinite(bps) && bps >= 0 && bps <= 3000 && Number.isFinite(fee) && fee >= 0;
   const submit = async () => {
-    if (!(await confirm({ title: 'Change this vendor’s plan?', body: <>New plan: <b>{f.commission}%</b> per paid order{fee ? <> + <b>{rupee(fee)}</b> a month</> : ''}{f.trial ? <>, free until <b>{day(f.trial)}</b></> : ''}. It applies to this month’s bill if it hasn’t been recorded yet. Tell the vendor before you change it.</>, confirm: 'Change plan', tone: 'primary' }))) return;
+    if (!(await confirm({ title: 'Change this vendor’s plan?', body: <>New plan: <b>{f.commission}%</b> of guest QR orders{fee ? <> + <b>{rupee(fee)}</b> a month</> : ''}{f.trial ? <>, free until <b>{day(f.trial)}</b></> : ''}. It applies to this month’s bill if it hasn’t been recorded yet. Tell the vendor before you change it.</>, confirm: 'Change plan', tone: 'primary' }))) return;
     save({ commissionBps: bps, monthlyFeePaise: fee, trialEndsAt: f.trial || null }, 'Plan updated');
   };
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
       <Card title="Plan">
         <div className="grid gap-3">
-          <Field label="Commission per paid order (%)"><input className={inputCls} inputMode="decimal" value={f.commission} onChange={e => setF({ ...f, commission: e.target.value })} /></Field>
+          <Field label="Commission on guest QR orders (%)" hint="Orders their staff bill at the counter carry no commission."><input className={inputCls} inputMode="decimal" value={f.commission} onChange={e => setF({ ...f, commission: e.target.value })} /></Field>
           <Field label="Monthly fee (₹)" hint="0 = no monthly fee"><input className={inputCls} inputMode="numeric" value={f.fee} onChange={e => setF({ ...f, fee: e.target.value.replace(/[^\d.]/g, '') })} /></Field>
           <Field label="Free trial until" hint="No commission or fee for orders before this date. Leave empty for no trial."><input type="date" className={inputCls} value={f.trial} onChange={e => setF({ ...f, trial: e.target.value })} /></Field>
         </div>
         <div className="mt-4 flex justify-end"><Btn tone="dark" disabled={!changed || !valid} onClick={submit}>Save plan</Btn></div>
       </Card>
+      <Modules v={v} save={save} />
       <Card title="Monthly bills from us" right={<Btn size="sm" tone="outline" onClick={() => nav.go('billing')}>Open billing</Btn>}>
         <ul className="divide-y divide-line text-sm">
           {bills.map(b => (
@@ -306,6 +330,38 @@ function NotesTab({ v, save }: { v: Vendor; save: (b: Record<string, unknown>, m
     <Card title="Internal notes" right={<span className="text-xs text-muted">Only the platform team sees these.</span>}>
       <textarea rows={10} className={inputCls} value={t} onChange={e => setT(e.target.value)} placeholder="Agreements, contacts, special requests, issues…" />
       <div className="mt-3 flex justify-end"><Btn tone="dark" disabled={t === v.notes} onClick={() => save({ notes: t }, 'Notes saved')}>Save notes</Btn></div>
+    </Card>
+  );
+}
+
+const MODULES: { key: keyof Features; label: string; hint: string }[] = [
+  { key: 'pos', label: 'Billing (POS) & cash drawer', hint: 'Staff take orders at the counter or table, takeaway, delivery, Zomato / Swiggy entry, split payments, cash drawer.' },
+  { key: 'inventory', label: 'Inventory', hint: 'Raw materials, recipes, automatic stock deduction, purchases, wastage, low-stock alerts.' },
+  { key: 'customers', label: 'Customer list', hint: 'Every guest with visits, spend and favourite dish; Excel download for offers.' },
+];
+// Which paid modules this vendor's plan includes. Guest QR ordering, KOTs, tables, reports and GST bills are always included.
+function Modules({ v, save }: { v: Vendor; save: (b: Record<string, unknown>, m: string) => Promise<boolean> }) {
+  const confirm = useConfirm();
+  const flip = async (k: keyof Features) => {
+    const on = !v.features[k];
+    const m = MODULES.find(x => x.key === k)!;
+    if (!(await confirm({
+      title: on ? `Switch on ${m.label} for ${v.name}?` : `Switch off ${m.label} for ${v.name}?`,
+      body: on ? 'It appears in their staff app right away.' : 'It disappears from their staff app right away. Their data is kept and comes back if you switch it on again.',
+      confirm: on ? 'Switch on' : 'Switch off', tone: on ? 'primary' : 'danger',
+    }))) return;
+    save({ features: { [k]: on } }, on ? `${m.label} switched on` : `${m.label} switched off`);
+  };
+  return (
+    <Card title="Modules in their plan" right={<span className="text-xs text-muted">QR ordering, KOTs, tables, reports and GST bills are always included</span>}>
+      <ul className="divide-y divide-line">
+        {MODULES.map(m => (
+          <li key={m.key} className="flex items-center justify-between gap-4 py-3">
+            <span><b className="text-sm font-semibold">{m.label}</b><span className="block text-xs text-muted">{m.hint}</span></span>
+            <Toggle on={v.features[m.key]} onChange={() => flip(m.key)} label={m.label} />
+          </li>
+        ))}
+      </ul>
     </Card>
   );
 }

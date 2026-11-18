@@ -20,10 +20,10 @@ Stop with **Ctrl+C**.
 | `npm run build` then `npm start` | Production build and run |
 | `npm run typecheck` | Check the code for type errors |
 | `npm run db:generate` | After changing `src/db/schema.ts`: create a new database migration |
-| `npm run test:e2e` | Full end-to-end test, 146 checks: every route, live updates, security. Needs testing mode: start the app with `EMAIL_PROVIDER=off npm start` (after `npm run build`) |
+| `npm run test:e2e` | Full end-to-end test, 147 checks: every route, live updates, security. Needs testing mode: start the app with `EMAIL_PROVIDER=off npm start` (after `npm run build`) |
 | `npm run db:migrate` | Update database tables (Vercel runs this automatically on every deploy) |
 | `npm run test:login` | Customer email-OTP login test, 18 checks |
-| `npm run test:pos` | Billing (POS) test, 85 checks: billing screen, sizes/add-ons, tables, split payment, discounts, cancellations, cash drawer, inventory, reports. Uses the demo restaurant; same testing mode as above |
+| `npm run test:pos` | Billing (POS) + admin modules test, 101 checks: billing screen, sizes/add-ons, tables, split payment, discounts, cancellations, cash drawer, inventory, reports. Uses the demo restaurant; same testing mode as above |
 
 **On your phone:** connect it to the same Wi-Fi and open the address printed at start-up (e.g. `http://192.168.1.7:3001`).
 QR codes point to that address. Before printing real stickers, set `PUBLIC_BASE_URL` in `.env` to your real web address.
@@ -108,6 +108,7 @@ Everything a restaurant expects from billing software like Petpooja, next to the
 - **Inventory**: materials, recipes per dish (and per size), stock goes down with every order and comes back on cancellation; purchases, wastage, counts, low-stock warning, days left, food cost %.
 - **Customers** list (visits, spend, favourite, CSV) and **menu upload from Excel** (CSV, with a template).
 - **Round-off** to the rupee (Settings). Commission applies only to orders guests place by QR.
+- **Super admin** (18 Nov): commission is calculated on guest QR orders only (Billing shows the "Guest QR" base, the monthly bill explains it); **modules per vendor** (Billing & cash drawer, Inventory, Customers) can be switched on/off in the vendor's Plan tab or during onboarding, and the staff app and API follow; each venue shows **usage** (share of guest QR / counter / Zomato-Swiggy orders, last order, stock, cash drawer); Overview shows sales **by order source** and warns when a live venue gets few guest QR orders.
 - Roles: captains can order and take payment; discounts and item cancellations are for owner / manager / cashier; Inventory and Customers for owner / manager.
 
 ## Automatic KOT printing

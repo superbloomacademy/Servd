@@ -15,7 +15,7 @@ export function monthRange(month: string) {
 }
 
 export type VendorDue = {
-  vendorId: string; orders: number; salesPaise: number; onlinePaise: number; cashPaise: number;
+  vendorId: string; orders: number; salesPaise: number; qrPaise: number; onlinePaise: number; cashPaise: number;
   commissionBps: number; commissionPaise: number; feePaise: number; totalPaise: number; trialNote: string | null;
 };
 
@@ -32,6 +32,7 @@ export async function monthlyDues(month: string): Promise<Map<string, VendorDue>
     orders: sql<number>`count(*)::int`,
     sales: sql<number>`coalesce(sum(${schema.orders.totalPaise}),0)::int`,
     cash: sql<number>`coalesce(sum(${schema.orders.totalPaise}) filter (where ${schema.orders.payMethod} = 'cash'),0)::int`,
+    qr: sql<number>`coalesce(sum(${schema.orders.totalPaise}) filter (where ${schema.orders.channel} = 'qr'),0)::int`,
     // Commission only on orders guests placed themselves by QR; orders typed in by staff are covered by the monthly fee.
     chargeable: sql<number>`coalesce(sum(${schema.orders.totalPaise}) filter (where ${schema.orders.channel} = 'qr' and (${schema.vendors.trialEndsAt} is null or ${schema.orders.paidAt} >= ${schema.vendors.trialEndsAt})),0)::int`,
   }).from(schema.orders)
@@ -51,7 +52,7 @@ export async function monthlyDues(month: string): Promise<Map<string, VendorDue>
       ? (inTrialAllMonth ? 'Free trial all month' : `Free trial until ${v.trialEndsAt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}`)
       : null;
     out.set(v.id, {
-      vendorId: v.id, orders: r?.orders ?? 0, salesPaise: sales, onlinePaise: sales - cash, cashPaise: cash,
+      vendorId: v.id, orders: r?.orders ?? 0, salesPaise: sales, qrPaise: r?.qr ?? 0, onlinePaise: sales - cash, cashPaise: cash,
       commissionBps: v.commissionBps, commissionPaise: commission, feePaise: fee, totalPaise: commission + fee, trialNote,
     });
   }

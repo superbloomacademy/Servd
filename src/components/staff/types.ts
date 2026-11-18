@@ -1,7 +1,7 @@
 export type Role = 'super_admin' | 'owner' | 'manager' | 'cashier' | 'station' | 'captain' | 'runner';
 export type Me = {
   staff: { id: string; name: string; phone: string; role: Role; vendorId: string | null; venueId: string | null; stationId: string | null; stationName: string | null };
-  venues: { id: string; name: string; type: string; serviceMode: string; vendorId: string; vendor: { name: string; logoUrl: string | null; brandColor: string; stage: 'setup' | 'live' } }[];
+  venues: { id: string; name: string; type: string; serviceMode: string; vendorId: string; vendor: { name: string; logoUrl: string | null; brandColor: string; stage: 'setup' | 'live'; features: { pos: boolean; inventory: boolean; customers: boolean } } }[];
 };
 export type Kot = { id: string; orderId: string; stationId: string | null; stationName: string; status: 'held' | 'new' | 'preparing' | 'ready'; createdAt: string; startedAt: string | null; readyAt: string | null };
 export type Order = {

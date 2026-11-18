@@ -30,10 +30,10 @@ import { Inventory } from './inventory';
 import { Customers } from './customers';
 
 type Tab = 'setup' | 'gst' | 'dashboard' | 'pos' | 'reports' | 'cash' | 'inventory' | 'customers' | 'live' | 'kitchen' | 'tables' | 'runner' | 'menu' | 'qr' | 'coupons' | 'team' | 'settings' | 'support' | 'activity';
-const NAV: { key: Tab; label: string; icon: React.ComponentType<{ size?: number }>; roles: Role[]; modes?: string[] }[] = [
+const NAV: { key: Tab; label: string; icon: React.ComponentType<{ size?: number }>; roles: Role[]; modes?: string[]; feature?: 'pos' | 'inventory' | 'customers' }[] = [
   { key: 'setup', label: 'Get started', icon: Rocket, roles: ['owner', 'manager'] },
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['owner', 'manager'] },
-  { key: 'pos', label: 'Billing', icon: Calculator, roles: ['owner', 'manager', 'cashier', 'captain'] },
+  { key: 'pos', label: 'Billing', icon: Calculator, roles: ['owner', 'manager', 'cashier', 'captain'], feature: 'pos' },
   { key: 'tables', label: 'Tables', icon: Armchair, roles: ['owner', 'manager', 'cashier', 'captain'], modes: ['table_bill', 'table_prepay'] },
   { key: 'live', label: 'Orders & payments', icon: ListOrdered, roles: ['owner', 'manager', 'cashier', 'captain'] },
   { key: 'kitchen', label: 'Kitchen (KOT)', icon: ChefHat, roles: ['owner', 'manager', 'cashier', 'station'] },
@@ -42,9 +42,9 @@ const NAV: { key: Tab; label: string; icon: React.ComponentType<{ size?: number 
   { key: 'qr', label: 'QR codes', icon: QrCode, roles: ['owner', 'manager'] },
   { key: 'coupons', label: 'Coupons', icon: BadgePercent, roles: ['owner', 'manager'] },
   { key: 'reports', label: 'Day-end reports', icon: BarChart3, roles: ['owner', 'manager', 'cashier'] },
-  { key: 'cash', label: 'Cash drawer', icon: Wallet, roles: ['owner', 'manager', 'cashier'] },
-  { key: 'inventory', label: 'Inventory', icon: Boxes, roles: ['owner', 'manager'] },
-  { key: 'customers', label: 'Customers', icon: Contact, roles: ['owner', 'manager'] },
+  { key: 'cash', label: 'Cash drawer', icon: Wallet, roles: ['owner', 'manager', 'cashier'], feature: 'pos' },
+  { key: 'inventory', label: 'Inventory', icon: Boxes, roles: ['owner', 'manager'], feature: 'inventory' },
+  { key: 'customers', label: 'Customers', icon: Contact, roles: ['owner', 'manager'], feature: 'customers' },
   { key: 'gst', label: 'GST bills', icon: ReceiptText, roles: ['owner', 'manager'] },
   { key: 'support', label: 'Customer help', icon: MessageCircleQuestion, roles: ['owner', 'manager'] },
   { key: 'team', label: 'Staff logins', icon: Users, roles: ['owner'] },
@@ -87,7 +87,9 @@ export function StaffShell() {
   const role: Role = me?.staff.role === 'super_admin' ? 'owner' : (me?.staff.role ?? 'cashier');
   // "Get started" shows while the vendor is still setting up.
   const settingUp = me?.venues.find(x => x.id === venueId)?.vendor.stage === 'setup';
-  const nav = NAV.filter(n => n.roles.includes(role) && (!n.modes || (venue && n.modes.includes(venue.serviceMode))) && (n.key !== 'setup' || settingUp));
+  const features = me?.venues.find(x => x.id === venueId)?.vendor.features;
+  const nav = NAV.filter(n => n.roles.includes(role) && (!n.modes || (venue && n.modes.includes(venue.serviceMode))) && (n.key !== 'setup' || settingUp)
+    && (!n.feature || !features || features[n.feature]));
 
   useEffect(() => {
     if (!me || !venue) return;
@@ -194,7 +196,7 @@ export function StaffShell() {
         {tab === 'dashboard' && <Dashboard venue={venue} />}
         {tab === 'live' && <LiveBoard venue={venue} live={live} role={role} flash={flash} reload={loadLive} />}
         {tab === 'kitchen' && <Kitchen venue={venue} live={live} role={role} myStation={myStation} flash={flash} reload={loadLive} />}
-        {tab === 'tables' && <Tables venue={venue} live={live} role={role} reload={loadLive} onOrder={sid => { setPresetSpot(sid); go('pos'); }} />}
+        {tab === 'tables' && <Tables venue={venue} live={live} role={role} reload={loadLive} onOrder={sid => { if (!nav.some(n => n.key === 'pos')) { toast('Taking orders from this screen needs the Billing module.', 'bad'); return; } setPresetSpot(sid); go('pos'); }} />}
         {tab === 'pos' && <Pos venue={venue} live={live} role={role} presetSpot={presetSpot} clearPreset={clearPreset} reload={loadLive} />}
         {tab === 'reports' && <Reports venue={venue} />}
         {tab === 'cash' && <CashDrawer venue={venue} />}

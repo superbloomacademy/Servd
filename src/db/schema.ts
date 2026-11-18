@@ -31,8 +31,12 @@ export const vendors = pgTable('vendors', {
   email: text('email'),
   invoicePrefix: text('invoice_prefix'),     // GST bill numbers: PREFIX/2627/00001
   notes: text('notes').notNull().default(''), // internal notes, only super admin sees them
+  // Plan modules the vendor may use. A missing key means ON (so older vendors keep everything).
+  features: jsonb('features').$type<Partial<VendorFeatures>>().notNull().default({}),
   createdAt: created(),
 });
+export type VendorFeatures = { pos: boolean; inventory: boolean; customers: boolean };
+export const featuresOf = (v: { features?: Partial<VendorFeatures> | null }): VendorFeatures => ({ pos: true, inventory: true, customers: true, ...(v.features || {}) });
 
 // Prospective venues we are talking to (sales pipeline). Won leads become vendors.
 export type LeadStage = 'new' | 'contacted' | 'demo' | 'trial' | 'won' | 'lost';
@@ -61,6 +65,7 @@ export const platformBills = pgTable('platform_bills', {
   number: text('number').notNull().unique(),  // SV-2611-0001
   orders: integer('orders').notNull(),
   salesPaise: integer('sales_paise').notNull(),
+  qrPaise: integer('qr_paise'),                // guest QR sales (the commission base); null on bills from before 18 Nov 2026
   onlinePaise: integer('online_paise').notNull(),
   cashPaise: integer('cash_paise').notNull(),
   commissionBps: integer('commission_bps').notNull(),

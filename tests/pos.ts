@@ -227,6 +227,35 @@ async function main() {
   const stats = (await owner.get(`/api/staff/v/${V}/stats?range=today`)).json;
   check('commission only on guest QR orders', stats.settlement.qrSalesPaise <= stats.revenue && stats.settlement.commissionPaise === Math.round(stats.settlement.qrSalesPaise * stats.settlement.commissionBps / 10000), stats.settlement);
 
+  section('Super admin: modules, commission base, usage');
+  const admin = new Client();
+  check('super admin logs in', (await admin.post('/api/staff/login', { phone: '9000000000', pin: '1234' })).json?.role === 'super_admin');
+  const vendorId = me.json.venues[0].vendorId as string;
+  const vd = (await admin.get(`/api/admin/vendors/${vendorId}`)).json;
+  check('vendor page: all modules on by default', vd?.vendor?.features?.pos && vd.vendor.features.inventory && vd.vendor.features.customers, vd?.vendor?.features);
+  const u = vd?.venues?.[0]?.usage;
+  check('vendor page: usage by source, last order, stock', u && u.qr.orders >= 1 && u.counter.orders >= 1 && u.apps.orders >= 1 && u.lastOrderAt && u.materials >= 4, u);
+  check('switch Billing off for this vendor', (await admin.patch(`/api/admin/vendors/${vendorId}`, { features: { pos: false } })).json?.vendor?.features?.pos === false);
+  check('…the other modules stay on', (await admin.get(`/api/admin/vendors/${vendorId}`)).json?.vendor?.features?.inventory === true);
+  const blocked = await pos(cashier, { type: 'takeaway', lines: [{ itemId: dal.id, qty: 1 }] });
+  check('…then the billing screen is refused', blocked.status === 403 && /plan/.test(blocked.json?.error), blocked.json);
+  check('…and the cash drawer too', (await cashier.get(`/api/staff/v/${V}/cash`)).status === 403);
+  check('…and the staff app hides it', (await cashier.get('/api/staff/me')).json?.venues?.[0]?.vendor?.features?.pos === false);
+  check('switch Billing back on', (await admin.patch(`/api/admin/vendors/${vendorId}`, { features: { pos: true } })).json?.vendor?.features?.pos === true);
+  check('…billing works again', (await pos(cashier, { type: 'takeaway', lines: [{ itemId: dal.id, qty: 1 }], payments: [{ method: 'cash', amountPaise: 31500 }] })).status === 200);
+  await admin.patch(`/api/admin/vendors/${vendorId}`, { features: { inventory: false } });
+  check('Inventory switched off → refused', (await owner.get(`/api/staff/v/${V}/inventory`)).status === 403);
+  await admin.patch(`/api/admin/vendors/${vendorId}`, { features: { inventory: true } });
+  check('a cashier cannot change modules', (await cashier.patch(`/api/admin/vendors/${vendorId}`, { features: { pos: false } })).status === 403);
+  const month = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date()).slice(0, 7);
+  const bl = (await admin.get(`/api/admin/billing?month=${month}`)).json;
+  const row = bl?.rows?.find((r: any) => r.vendorId === vendorId);
+  check('billing: guest QR sales shown and smaller than total sales', row && row.qrPaise > 0 && row.qrPaise < row.salesPaise, row && { qr: row.qrPaise, sales: row.salesPaise });
+  check('billing: commission is charged on guest QR sales only', row && row.commissionPaise <= Math.round(row.qrPaise * row.commissionBps / 10000), row && { c: row.commissionPaise, qr: row.qrPaise, bps: row.commissionBps });
+  const ov = (await admin.get('/api/admin/overview')).json;
+  check('overview: sales by source (QR / counter / apps)', ov?.sources?.qr?.orders > 0 && ov.sources.counter.orders > 0 && ov.sources.apps.orders > 0, ov?.sources);
+  check('overview: low-QR list is there', Array.isArray(ov?.attention?.lowQr));
+
   section('Guest QR order with a size');
   const busyNow = new Set((await live()).tables.map((t: any) => t.session.spotId));
   const t4 = (await owner.get(`/api/staff/v/${V}/spots`)).json.spots.filter((s: any) => s.kind === 'table' && s.active && !busyNow.has(s.id))[0];

@@ -4,6 +4,7 @@ import { db, schema } from '@/db';
 import { body, notFound, route } from '@/lib/api';
 import { requireVenueAccess } from '@/lib/auth';
 import { CAN } from '@/lib/roles';
+import { requireFeature } from '@/lib/vendor-access';
 import { createPosOrder } from '@/lib/pos';
 import { bad } from '@/lib/api';
 import type { StaffRole } from '@/db/schema';
@@ -26,6 +27,7 @@ const Input = z.object({
 // Billing screen: a new order typed in by staff. Sends the KOT straight away; pays now or later.
 export const POST = route<{ venueId: string }>(async (req, { venueId }) => {
   const s = await requireVenueAccess(venueId, CAN.pos);
+  await requireFeature(venueId, 'pos');
   const b = Input.parse(await body(req));
   if (b.payments?.length && s.role !== 'super_admin' && !(CAN.settle as StaffRole[]).includes(s.role)) throw bad('Your role can send KOTs but not take payments.');
   if (b.discount?.value && s.role !== 'super_admin' && !(CAN.discount as StaffRole[]).includes(s.role)) throw bad('Your role cannot give discounts.');

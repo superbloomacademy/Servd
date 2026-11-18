@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { AlertCircle, CalendarClock, ChevronRight, Hourglass, MessageCircleWarning, MoonStar, Wrench } from 'lucide-react';
+import { AlertCircle, CalendarClock, ChevronRight, Hourglass, MessageCircleWarning, MoonStar, QrCode, Wrench } from 'lucide-react';
 import { api, rupee, rupeeShort, timeAgo } from '@/lib/client';
 import { Spinner } from '@/components/ui/kit';
 import { Bars } from '@/components/staff/dashboard';
@@ -14,6 +14,7 @@ type Data = {
     vendors: { total: number; live: number; setup: number; suspended: number }; unpaidEarlier: { n: number; total: number };
   };
   days: { day: string; sales: number; orders: number }[];
+  sources: { qr: Sum; counter: Sum; apps: Sum };
   top: { venueId: string; venue: string; vendor: string; vendorId: string; sales: number; orders: number }[];
   attention: {
     followUps: { id: string; business: string; stage: string; nextFollowUp: string; phone: string }[];
@@ -22,6 +23,7 @@ type Data = {
     tickets: { id: string; topic: string; venue: string; createdAt: string }[];
     trialsEnding: { id: string; name: string; trialEndsAt: string }[];
     suspended: { id: string; name: string }[];
+    lowQr: { venueId: string; venue: string; vendor: string; vendorId: string; share: number; orders: number }[];
   };
 };
 
@@ -30,12 +32,12 @@ export function Overview({ nav }: { nav: Nav }) {
   useEffect(() => { api<Data>('/api/admin/overview').then(setD); }, []);
   if (!d) return <div className="grid place-items-center py-24"><Spinner className="text-muted" /></div>;
   const { kpi, attention: a } = d;
-  const items = a.followUps.length + a.setup.length + a.quiet.length + a.tickets.length + a.trialsEnding.length + (kpi.unpaidEarlier.n ? 1 : 0);
+  const items = a.followUps.length + a.setup.length + a.quiet.length + a.tickets.length + a.trialsEnding.length + a.lowQr.length + (kpi.unpaidEarlier.n ? 1 : 0);
   const stageLabel = (s: string) => LEAD_STAGES.find(x => x[0] === s)?.[1] ?? s;
 
   return (
     <div>
-      <PageHead title="Overview" sub="All venues on the platform. Sales are paid orders only (UPI to the venue + cash)." />
+      <PageHead title="Overview" sub="All venues on the platform. Sales are paid orders only, from guest QR and from staff billing." />
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi label="Sales today" value={rupee(kpi.today.sales)} sub={`${kpi.today.orders} orders`} />
         <Kpi label="Last 7 days" value={rupeeShort(kpi.week.sales)} sub={`${kpi.week.orders} orders`} />
@@ -51,6 +53,9 @@ export function Overview({ nav }: { nav: Nav }) {
         <div className="space-y-4">
           <Card title="Sales, last 14 days">
             <Bars money data={d.days.map(x => ({ label: new Date(`${x.day}T12:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }), value: x.sales, sub: `${x.orders} orders` }))} />
+          </Card>
+          <Card title="Where orders come from · 30 days" right={<span className="text-xs text-muted">Commission is earned on guest QR orders</span>}>
+            <Sources s={d.sources} />
           </Card>
           <Card title="Top venues · 30 days">
             <ul className="divide-y divide-line text-sm">
@@ -91,6 +96,10 @@ export function Overview({ nav }: { nav: Nav }) {
               <Row key={v.venueId} icon={<MoonStar size={17} />} tone="neutral" onClick={() => nav.go('vendors', { vendor: v.vendorId })}
                 title={`No orders in 7 days: ${v.venue}`} sub={`${v.vendor}. Check if they need help or new QR stickers.`} />
             ))}
+            {a.lowQr.map(v => (
+              <Row key={v.venueId} icon={<QrCode size={17} />} tone="warn" onClick={() => nav.go('vendors', { vendor: v.vendorId })}
+                title={`Few guest QR orders: ${v.venue}`} sub={`Only ${v.share}% of ${v.orders} orders in 30 days came by QR (${v.vendor}). Check the stickers are on every table and staff tell guests to scan.`} />
+            ))}
             {kpi.unpaidEarlier.n > 0 && (
               <Row icon={<AlertCircle size={17} />} tone="bad" onClick={() => nav.go('billing')}
                 title={`${kpi.unpaidEarlier.n} unpaid bills from earlier months`} sub={`${rupee(kpi.unpaidEarlier.total)} to collect`} />
@@ -112,5 +121,28 @@ function Row({ icon, title, sub, tone, onClick }: { icon: React.ReactNode; title
         <ChevronRight size={16} className="mt-2 shrink-0 text-faint" />
       </button>
     </li>
+  );
+}
+
+function Sources({ s }: { s: { qr: Sum; counter: Sum; apps: Sum } }) {
+  const list = [
+    { label: 'Guests ordered by QR', v: s.qr, color: 'var(--brand)' },
+    { label: 'Staff billed at counter / table', v: s.counter, color: '#3D4152' },
+    { label: 'Zomato / Swiggy (typed in)', v: s.apps, color: '#9AA0AC' },
+  ];
+  const total = Math.max(1, list.reduce((a, x) => a + x.v.sales, 0));
+  return (
+    <div>
+      <div className="flex h-3 overflow-hidden rounded-full bg-soft">{list.map(x => <div key={x.label} style={{ width: `${(x.v.sales / total) * 100}%`, background: x.color }} />)}</div>
+      <ul className="mt-3 grid gap-3 sm:grid-cols-3">
+        {list.map(x => (
+          <li key={x.label} className="text-sm">
+            <span className="flex items-center gap-2 text-ink-2"><span className="h-2.5 w-2.5 rounded-full" style={{ background: x.color }} />{x.label}</span>
+            <span className="tabular mt-0.5 block text-lg font-extrabold">{rupee(x.v.sales)}</span>
+            <span className="tabular text-xs text-muted">{Math.round((x.v.sales / total) * 100)}% · {x.v.orders} order{x.v.orders === 1 ? '' : 's'}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
