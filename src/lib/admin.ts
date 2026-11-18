@@ -16,12 +16,12 @@ export function monthRange(month: string) {
 
 export type VendorDue = {
   vendorId: string; orders: number; salesPaise: number; qrPaise: number; onlinePaise: number; cashPaise: number;
-  commissionBps: number; commissionPaise: number; feePaise: number; totalPaise: number; trialNote: string | null;
+  commissionBps: number; commissionPaise: number; commissionCapPaise: number; capped: boolean; feePaise: number; totalPaise: number; trialNote: string | null;
 };
 
 /**
  * What every vendor owes for a month:
- * - commission % on paid QR orders (orders paid during a free trial, and orders billed by staff, are not charged)
+ * - commission % on paid QR orders (orders paid during a free trial, and orders billed by staff, are not charged), at most the vendor's monthly cap
  * - the monthly fee, if the vendor was live and out of trial before the month ended.
  */
 export async function monthlyDues(month: string): Promise<Map<string, VendorDue>> {
@@ -44,7 +44,9 @@ export async function monthlyDues(month: string): Promise<Map<string, VendorDue>
     if (v.createdAt >= end || v.isDemo) continue;   // demo vendors are never billed
     const r = rows.find(x => x.vendorId === v.id);
     const sales = r?.sales ?? 0, cash = r?.cash ?? 0;
-    const commission = Math.round((r?.chargeable ?? 0) * v.commissionBps / 10000);
+    const fullCommission = Math.round((r?.chargeable ?? 0) * v.commissionBps / 10000);
+    // Monthly cap on commission (0 = no cap), so busy venues never pay more than agreed.
+    const commission = v.commissionCapPaise > 0 ? Math.min(fullCommission, v.commissionCapPaise) : fullCommission;
     const inTrialAllMonth = !!v.trialEndsAt && v.trialEndsAt >= end;
     const live = !!v.liveAt && v.liveAt < end;
     const fee = live && !inTrialAllMonth ? v.monthlyFeePaise : 0;
@@ -53,7 +55,7 @@ export async function monthlyDues(month: string): Promise<Map<string, VendorDue>
       : null;
     out.set(v.id, {
       vendorId: v.id, orders: r?.orders ?? 0, salesPaise: sales, qrPaise: r?.qr ?? 0, onlinePaise: sales - cash, cashPaise: cash,
-      commissionBps: v.commissionBps, commissionPaise: commission, feePaise: fee, totalPaise: commission + fee, trialNote,
+      commissionBps: v.commissionBps, commissionPaise: commission, commissionCapPaise: v.commissionCapPaise, capped: commission < fullCommission, feePaise: fee, totalPaise: commission + fee, trialNote,
     });
   }
   return out;

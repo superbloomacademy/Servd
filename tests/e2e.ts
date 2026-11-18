@@ -213,6 +213,11 @@ async function main() {
   const bill = await admin.get(`/api/admin/billing?month=${month}`);
   const row = bill.json?.rows?.find((r: any) => r.vendorId === vendorId);
   check('commission 2% of 178.50 = 3.57, + ₹499 fee', row?.commissionPaise === 357 && row.feePaise === 49900 && row.totalPaise === 50257, row);
+  await admin.patch(`/api/admin/vendors/${vendorId}`, { commissionCapPaise: 200 });
+  const capped = (await admin.get(`/api/admin/billing?month=${month}`)).json?.rows?.find((r: any) => r.vendorId === vendorId);
+  check('monthly commission cap: ₹3.57 is capped at ₹2', capped?.commissionPaise === 200 && capped.capped === true && capped.totalPaise === 50100, capped);
+  await admin.patch(`/api/admin/vendors/${vendorId}`, { commissionCapPaise: 0 });
+  check('no cap again: back to ₹3.57', (await admin.get(`/api/admin/billing?month=${month}`)).json?.rows?.find((r: any) => r.vendorId === vendorId)?.commissionPaise === 357);
   const rec = await admin.post('/api/admin/billing', { vendorId, month, action: 'mark_paid', reference: 'UPI 9988' });
   check('mark this month as paid (bill recorded with number)', rec.json?.bill?.status === 'paid' && /^SV-\d{4}-\d{3}$/.test(rec.json.bill.number), rec.json);
   check('owner can open our bill', (await owner.get(`/print/platform-bill/${rec.json.bill.id}`)).text.includes(rec.json.bill.number));

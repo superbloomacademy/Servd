@@ -22,6 +22,7 @@ export const vendors = pgTable('vendors', {
   phone: text('phone'),
   commissionBps: integer('commission_bps').notNull().default(0),   // 250 = 2.5% per order
   monthlyFeePaise: integer('monthly_fee_paise').notNull().default(0),
+  commissionCapPaise: integer('commission_cap_paise').notNull().default(0),   // most commission in one month (0 = no cap)
   status: text('status').$type<'active' | 'suspended'>().notNull().default('active'),
   // Onboarding: 'setup' until the owner (or we) press "Go live".
   stage: text('stage').$type<'setup' | 'live'>().notNull().default('setup'),
@@ -72,6 +73,7 @@ export const platformBills = pgTable('platform_bills', {
   cashPaise: integer('cash_paise').notNull(),
   commissionBps: integer('commission_bps').notNull(),
   commissionPaise: integer('commission_paise').notNull(),
+  commissionCapPaise: integer('commission_cap_paise'),   // cap that applied this month (null/0 = none)
   feePaise: integer('fee_paise').notNull(),
   totalPaise: integer('total_paise').notNull(),
   status: text('status').$type<'due' | 'paid' | 'waived'>().notNull().default('due'),

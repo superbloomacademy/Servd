@@ -54,7 +54,7 @@ export const POST = route(async req => {
     [bill] = await db().insert(schema.platformBills).values({
       vendorId: b.vendorId, month: b.month, number: `SV-${b.month.replace('-', '').slice(2)}-${String(n + 1).padStart(3, '0')}`,
       orders: due.orders, salesPaise: due.salesPaise, qrPaise: due.qrPaise, onlinePaise: due.onlinePaise, cashPaise: due.cashPaise,
-      commissionBps: due.commissionBps, commissionPaise: due.commissionPaise, feePaise: due.feePaise, totalPaise: due.totalPaise,
+      commissionBps: due.commissionBps, commissionPaise: due.commissionPaise, commissionCapPaise: due.capped ? due.commissionCapPaise : null, feePaise: due.feePaise, totalPaise: due.totalPaise,
     }).returning();
   }
   if (b.action !== 'record') {

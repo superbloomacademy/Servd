@@ -63,6 +63,7 @@ const Patch = z.object({
   stage: z.enum(['setup', 'live']).optional(),
   commissionBps: z.number().int().min(0).max(3000).optional(),
   monthlyFeePaise: z.number().int().min(0).max(10_000_000).optional(),
+  commissionCapPaise: z.number().int().min(0).max(10_000_000).optional(),
   trialEndsAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   name: z.string().trim().min(2).max(60).optional(),
   legalName: z.string().trim().max(100).optional(),

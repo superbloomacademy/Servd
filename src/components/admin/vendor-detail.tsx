@@ -13,7 +13,7 @@ type Checklist = { steps: Step[]; done: number; total: number; ready: boolean };
 type Vendor = {
   id: string; name: string; brandColor: string; logoUrl: string | null; legalName: string | null; gstin: string | null; fssai: string | null;
   address: string | null; phone: string | null; email: string | null; contactName: string | null; invoicePrefix: string | null; invoicePrefixShown: string;
-  commissionBps: number; monthlyFeePaise: number; trialEndsAt: string | null; status: 'active' | 'suspended'; stage: 'setup' | 'live';
+  commissionBps: number; monthlyFeePaise: number; commissionCapPaise: number; trialEndsAt: string | null; status: 'active' | 'suspended'; stage: 'setup' | 'live';
   liveAt: string | null; notes: string; createdAt: string; features: Features; isDemo: boolean;
 };
 type Features = { pos: boolean; inventory: boolean; customers: boolean };
@@ -288,20 +288,21 @@ function UsageLine({ u, f }: { u: Usage; f: Features }) {
 // ---------------------------------------------------------------- plan & bills
 function PlanTab({ v, bills, save, nav }: { v: Vendor; bills: Bill[]; save: (b: Record<string, unknown>, m: string) => Promise<boolean>; nav: Nav }) {
   const confirm = useConfirm();
-  const init = { commission: String(v.commissionBps / 100), fee: String(v.monthlyFeePaise / 100), trial: v.trialEndsAt ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(v.trialEndsAt)) : '' };
+  const init = { commission: String(v.commissionBps / 100), fee: String(v.monthlyFeePaise / 100), cap: v.commissionCapPaise ? String(v.commissionCapPaise / 100) : '', trial: v.trialEndsAt ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date(v.trialEndsAt)) : '' };
   const [f, setF] = useState(init);
   const changed = JSON.stringify(f) !== JSON.stringify(init);
-  const bps = Math.round(Number(f.commission) * 100), fee = Math.round(Number(f.fee) * 100);
-  const valid = Number.isFinite(bps) && bps >= 0 && bps <= 3000 && Number.isFinite(fee) && fee >= 0;
+  const bps = Math.round(Number(f.commission) * 100), fee = Math.round(Number(f.fee) * 100), cap = Math.round(Number(f.cap || 0) * 100);
+  const valid = Number.isFinite(bps) && bps >= 0 && bps <= 3000 && Number.isFinite(fee) && fee >= 0 && Number.isFinite(cap) && cap >= 0;
   const submit = async () => {
-    if (!(await confirm({ title: 'Change this vendor’s plan?', body: <>New plan: <b>{f.commission}%</b> of guest QR orders{fee ? <> + <b>{rupee(fee)}</b> a month</> : ''}{f.trial ? <>, free until <b>{day(f.trial)}</b></> : ''}. It applies to this month’s bill if it hasn’t been recorded yet. Tell the vendor before you change it.</>, confirm: 'Change plan', tone: 'primary' }))) return;
-    save({ commissionBps: bps, monthlyFeePaise: fee, trialEndsAt: f.trial || null }, 'Plan updated');
+    if (!(await confirm({ title: 'Change this vendor’s plan?', body: <>New plan: <b>{f.commission}%</b> of guest QR orders{cap ? <> (at most <b>{rupee(cap)}</b> a month)</> : ''}{fee ? <> + <b>{rupee(fee)}</b> a month</> : ''}{f.trial ? <>, free until <b>{day(f.trial)}</b></> : ''}. It applies to this month’s bill if it hasn’t been recorded yet. Tell the vendor before you change it.</>, confirm: 'Change plan', tone: 'primary' }))) return;
+    save({ commissionBps: bps, monthlyFeePaise: fee, commissionCapPaise: cap, trialEndsAt: f.trial || null }, 'Plan updated');
   };
   return (
     <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
       <Card title="Plan">
         <div className="grid gap-3">
           <Field label="Commission on guest QR orders (%)" hint="Orders their staff bill at the counter carry no commission."><input className={inputCls} inputMode="decimal" value={f.commission} onChange={e => setF({ ...f, commission: e.target.value })} /></Field>
+          <Field label="Commission cap per month (₹)" hint="The most commission they pay in a month. Empty = no cap."><input className={inputCls} inputMode="numeric" value={f.cap} placeholder="e.g. 2000" onChange={e => setF({ ...f, cap: e.target.value.replace(/[^\d.]/g, '') })} /></Field>
           <Field label="Monthly fee (₹)" hint="0 = no monthly fee"><input className={inputCls} inputMode="numeric" value={f.fee} onChange={e => setF({ ...f, fee: e.target.value.replace(/[^\d.]/g, '') })} /></Field>
           <Field label="Free trial until" hint="No commission or fee for orders before this date. Leave empty for no trial."><input type="date" className={inputCls} value={f.trial} onChange={e => setF({ ...f, trial: e.target.value })} /></Field>
         </div>

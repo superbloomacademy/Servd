@@ -30,7 +30,7 @@ export function Onboard({ nav, prefill }: { nav: Nav; prefill?: OnboardPrefill }
     gstin: '', fssai: '', address: '', brandColor: '#E23744',
     venueName: '', type: type0, serviceMode: DEFAULT_MODE[type0], city: prefill?.city || '', taxBps: 500, openTime: '10:00', closeTime: '23:00', allDay: false, upiId: '',
     ownerName: prefill?.ownerName || '', ownerPhone: prefill?.ownerPhone || '', ownerPin: makePin(),
-    commission: '2', fee: '0', trialDays: 30, features: { pos: true, inventory: true, customers: true },
+    commission: '2', fee: '0', cap: '', trialDays: 30, features: { pos: true, inventory: true, customers: true },
   });
   const set = <K extends keyof typeof f>(k: K, val: (typeof f)[K]) => { setF(p => ({ ...p, [k]: val })); setErr(''); };
   const inp = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => set(k, e.target.value as never);
@@ -60,7 +60,7 @@ export function Onboard({ nav, prefill }: { nav: Nav; prefill?: OnboardPrefill }
       const r = await api<Omit<Created, 'pin'>>('/api/admin/vendors', {
         body: {
           ...f, gstin: f.gstin.toUpperCase(), openTime: f.allDay ? '00:00' : f.openTime, closeTime: f.allDay ? '00:00' : f.closeTime,
-          commissionBps: Math.round(Number(f.commission) * 100), monthlyFeePaise: Math.round(Number(f.fee) * 100), leadId: prefill?.leadId ?? null, features: f.features,
+          commissionBps: Math.round(Number(f.commission) * 100), monthlyFeePaise: Math.round(Number(f.fee) * 100), commissionCapPaise: Math.round(Number(f.cap || 0) * 100), leadId: prefill?.leadId ?? null, features: f.features,
         },
       });
       setDone({ ...r, pin: f.ownerPin }); window.scrollTo(0, 0);
@@ -170,6 +170,7 @@ export function Onboard({ nav, prefill }: { nav: Nav; prefill?: OnboardPrefill }
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Commission on guest QR orders (%)" hint="e.g. 2 = ₹2 on a ₹100 order. Orders their staff bill at the counter are free."><input className={inputCls} inputMode="decimal" value={f.commission} onChange={e => set('commission', e.target.value.replace(/[^\d.]/g, ''))} /></Field>
               <Field label="Monthly fee (₹)" hint="0 = no monthly fee"><input className={inputCls} inputMode="numeric" value={f.fee} onChange={e => set('fee', e.target.value.replace(/[^\d.]/g, ''))} /></Field>
+              <Field label="Commission cap per month (₹)" hint="Optional. The most commission they pay in a month."><input className={inputCls} inputMode="numeric" value={f.cap} placeholder="e.g. 2000" onChange={e => set('cap', e.target.value.replace(/[^\d.]/g, ''))} /></Field>
             </div>
             <div>
               <p className="mb-1.5 text-[13px] font-semibold text-ink-2">Free trial</p>

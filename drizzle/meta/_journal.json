@@ -50,6 +50,13 @@
       "when": 1794966355130,
       "tag": "0006_demo_vendors",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794969171330,
+      "tag": "0007_commission_cap",
+      "breakpoints": true
     }
   ]
 }

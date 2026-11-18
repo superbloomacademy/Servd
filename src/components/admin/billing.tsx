@@ -10,7 +10,7 @@ import type { Nav } from './super-admin';
 type Bill = { id: string; number: string; totalPaise: number; status: 'due' | 'paid' | 'waived'; paidAt: string | null; reference: string | null };
 type Row = {
   vendorId: string; vendorName: string; brandColor: string; vendorStatus: string; orders: number; salesPaise: number; qrPaise: number; onlinePaise: number; cashPaise: number;
-  commissionBps: number; commissionPaise: number; feePaise: number; totalPaise: number; trialNote: string | null; bill: Bill | null;
+  commissionBps: number; commissionPaise: number; capped: boolean; commissionCapPaise: number; feePaise: number; totalPaise: number; trialNote: string | null; bill: Bill | null;
 };
 type Data = { month: string; label: string; isCurrent: boolean; rows: Row[]; totals: { sales: number; due: number; collected: number; waived: number } };
 
@@ -78,7 +78,7 @@ export function Billing({ nav }: { nav: Nav }) {
                   </td>
                   <td className="tabular px-2 text-right">{rupee(r.salesPaise)}</td>
                   <td className="tabular px-2 text-right">{rupee(r.qrPaise)}<span className="block text-xs text-muted">{r.salesPaise ? Math.round((r.qrPaise / r.salesPaise) * 100) : 0}% of sales</span></td>
-                  <td className="tabular px-2 text-right">{rupee(r.commissionPaise)}<span className="block text-xs text-muted">{pct(r.commissionBps)}</span></td>
+                  <td className="tabular px-2 text-right">{rupee(r.commissionPaise)}<span className="block text-xs text-muted">{pct(r.commissionBps)}{r.capped ? ` · capped at ${rupee(r.commissionCapPaise)}` : ''}</span></td>
                   <td className="tabular px-2 text-right">{rupee(r.feePaise)}</td>
                   <td className="tabular px-2 text-right font-bold">{rupee(r.bill?.totalPaise ?? r.totalPaise)}{r.bill && r.bill.totalPaise !== r.totalPaise && <span className="block text-[11px] font-normal text-muted">recorded</span>}</td>
                   <td className="px-2">{!r.bill ? <Pill tone="neutral">Not recorded</Pill> : s === 'paid' ? <Pill tone="good">Paid</Pill> : s === 'waived' ? <Pill tone="neutral">Waived</Pill> : <Pill tone="warn">Due</Pill>}

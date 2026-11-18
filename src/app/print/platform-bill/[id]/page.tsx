@@ -53,7 +53,7 @@ export default async function PlatformBill({ params }: { params: Promise<{ id: s
           <thead><tr className="border-b-2 border-black text-left"><th className="py-2">Description</th><th className="py-2 text-right">Amount (₹)</th></tr></thead>
           <tbody>
             <tr className="border-b border-[#ddd]"><td className="py-2.5">{bill.qrPaise != null
-              ? <>Platform commission: {(bill.commissionBps / 100).toLocaleString('en-IN')}% of ₹{r(bill.qrPaise)} orders guests placed by QR</>
+              ? <>Platform commission: {(bill.commissionBps / 100).toLocaleString('en-IN')}% of ₹{r(bill.qrPaise)} orders guests placed by QR{bill.commissionCapPaise ? <>, capped at ₹{r(bill.commissionCapPaise)} a month</> : null}</>
               : <>Platform commission: {(bill.commissionBps / 100).toLocaleString('en-IN')}% of ₹{r(bill.salesPaise)} paid orders ({bill.orders} orders)</>}
               <span className="block text-xs text-[#666]">{bill.qrPaise != null ? <>Your total sales ₹{r(bill.salesPaise)} ({bill.orders} orders); orders your staff billed at the counter carry no commission. </> : null}UPI ₹{r(bill.onlinePaise)} · cash ₹{r(bill.cashPaise)}. Customer payments went directly to you.</span></td><td className="py-2.5 text-right">{r(bill.commissionPaise)}</td></tr>
             <tr className="border-b border-[#ddd]"><td className="py-2.5">Monthly platform fee</td><td className="py-2.5 text-right">{r(bill.feePaise)}</td></tr>
