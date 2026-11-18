@@ -17,7 +17,7 @@ export const GET = route<{ id: string }>(async (_req, { id }) => {
   const inv = await invoiceForOrder(o);
   // "Back to menu": the QR this order came from, but only while the visit is fresh (no ordering from home later),
   // and only if that QR is still switched on and hasn't been replaced since.
-  const spot = (await db().select().from(schema.spots).where(eq(schema.spots.id, o.spotId)))[0];
+  const spot = o.spotId ? (await db().select().from(schema.spots).where(eq(schema.spots.id, o.spotId)))[0] : null;
   const fresh = Date.now() - o.createdAt.getTime() < r.venue.settings.sessionHours * 3600e3;
   const menuCode = spot && spot.active && fresh && (!spot.codeReplacedAt || spot.codeReplacedAt < o.createdAt) ? spot.code : null;
   return {

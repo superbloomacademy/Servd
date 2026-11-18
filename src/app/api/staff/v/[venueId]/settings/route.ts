@@ -27,6 +27,7 @@ const Patch = z.object({
     acceptCash: z.boolean(), unpaidCancelMin: z.number().int().min(2).max(120), startBeforePayment: z.boolean(),
     rescanMinutes: z.number().int().min(10).max(600), sessionHours: z.number().int().min(1).max(24),
     pauseLastMin: z.number().int().min(0).max(120), showWindowBeforeMin: z.number().int().min(0).max(120),
+    roundOff: z.boolean(),
   }).partial().optional(),
 });
 

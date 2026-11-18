@@ -1,7 +1,7 @@
 // Demo data: a super admin and four vendors, one per venue type, each with its own brand,
 // menu, stations, staff logins, coupons and ~2 weeks of past orders (marked by note "[demo]").
 // All demo staff log in with PIN 1234.
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db, schema } from './index';
 import { defaultSettings, type ServiceMode, type VenueType } from './schema';
 import { hashPin, parseRows, randomCode } from '../lib/util';
@@ -222,8 +222,58 @@ async function vendor(spec: VendorSpec) {
     await d.insert(schema.coupons).values({ vendorId: v.id, code, type, value, maxDiscountPaise: maxD, minOrderPaise: minO, perCustomer: perC, description });
   }
 
+  await demoExtras(venue, itemRows);
   await sampleOrders(venue, spotIds, itemRows);
 }
+
+// Demo of sizes, add-ons, round-off and inventory, so the POS features are visible straight away.
+async function demoExtras(venue: typeof schema.venues.$inferSelect, itemRows: (typeof schema.items.$inferSelect)[]) {
+  const d = db();
+  const item = (n: string) => itemRows.find(i => i.name === n);
+  const setOpts = async (n: string, variants: schema.ItemVariant[], addonGroups: schema.AddonGroup[] = []) => {
+    const it = item(n);
+    if (!it) return null;
+    const price = variants.length ? Math.min(...variants.map(v => v.pricePaise)) : it.pricePaise;
+    await d.update(schema.items).set({ variants, addonGroups, pricePaise: price }).where(eq(schema.items.id, it.id));
+    return it;
+  };
+  const mats = async (list: [string, string, number, number, number][]) => {
+    const out: Record<string, string> = {};
+    for (const [name, unit, qty, low, cost] of list) {
+      const [m] = await d.insert(schema.stockItems).values({ venueId: venue.id, name, unit, qty, lowLevel: low, costPaise: cost * 100 }).returning();
+      await d.insert(schema.stockMoves).values({ venueId: venue.id, stockItemId: m.id, kind: 'adjust', qty, note: 'Opening stock', staffName: 'Setup' });
+      out[name] = m.id;
+    }
+    return out;
+  };
+  const recipe = async (itemName: string, variantId: string | null, lines: [string, number][], m: Record<string, string>) => {
+    const it = item(itemName);
+    if (it) await d.insert(schema.recipes).values(lines.map(([mat, qty]) => ({ venueId: venue.id, itemId: it.id, variantId, stockItemId: m[mat], qty })));
+  };
+
+  if (venue.serviceMode === 'table_bill') {
+    await d.update(schema.venues).set({ settings: { ...venue.settings, roundOff: true } }).where(eq(schema.venues.id, venue.id));
+    await setOpts('Chicken Dum Biryani', [{ id: 'half', name: 'Half', pricePaise: 26000 }, { id: 'full', name: 'Full', pricePaise: 38000 }],
+      [{ id: 'extras', name: 'Extras', min: 0, max: 2, options: [{ id: 'egg', name: 'Boiled egg', pricePaise: 2000, veg: false }, { id: 'raita', name: 'Extra raita', pricePaise: 3000, veg: true }] }]);
+    await setOpts('Butter Chicken', [], [{ id: 'bread', name: 'Add bread', min: 0, max: 2, options: [{ id: 'bnaan', name: 'Butter Naan', pricePaise: 7000, veg: true }, { id: 'gnaan', name: 'Garlic Naan', pricePaise: 9000, veg: true }] }]);
+    const m = await mats([['Paneer', 'kg', 8, 2, 380], ['Chicken', 'kg', 12, 3, 260], ['Basmati rice', 'kg', 20, 5, 120], ['Butter', 'kg', 3, 1, 520]]);
+    await recipe('Paneer Tikka', null, [['Paneer', 0.2]], m);
+    await recipe('Kadai Paneer', null, [['Paneer', 0.18], ['Butter', 0.02]], m);
+    await recipe('Butter Chicken', null, [['Chicken', 0.25], ['Butter', 0.03]], m);
+    await recipe('Chicken 65', null, [['Chicken', 0.22]], m);
+    await recipe('Chicken Dum Biryani', 'half', [['Chicken', 0.15], ['Basmati rice', 0.12]], m);
+    await recipe('Chicken Dum Biryani', 'full', [['Chicken', 0.25], ['Basmati rice', 0.2]], m);
+  }
+  if (venue.type === 'cafe') {
+    await setOpts('Cappuccino', [{ id: 'reg', name: 'Regular', pricePaise: 18000 }, { id: 'lg', name: 'Large', pricePaise: 22000 }],
+      [{ id: 'extras', name: 'Make it special', min: 0, max: 2, options: [{ id: 'shot', name: 'Extra shot', pricePaise: 4000, veg: true }, { id: 'oat', name: 'Oat milk', pricePaise: 5000, veg: true }, { id: 'hazel', name: 'Hazelnut syrup', pricePaise: 3000, veg: true }] }]);
+    const m = await mats([['Coffee beans', 'kg', 4, 1, 1400], ['Milk', 'l', 15, 5, 60]]);
+    await recipe('Cappuccino', 'reg', [['Coffee beans', 0.018], ['Milk', 0.15]], m);
+    await recipe('Cappuccino', 'lg', [['Coffee beans', 0.025], ['Milk', 0.22]], m);
+    await recipe('Café Latte', null, [['Coffee beans', 0.018], ['Milk', 0.2]], m);
+  }
+}
+
 
 // Two weeks of delivered orders so dashboards and "Most ordered" have real numbers.
 async function sampleOrders(venue: typeof schema.venues.$inferSelect, spotIds: string[], itemRows: (typeof schema.items.$inferSelect)[]) {

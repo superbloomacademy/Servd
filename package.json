@@ -13,7 +13,8 @@
     "test:e2e": "tsx tests/e2e.ts",
     "test:login": "bash tests/login-email-otp.sh",
     "db:migrate": "tsx scripts/migrate.ts",
-    "vercel-build": "tsx scripts/migrate.ts && next build"
+    "vercel-build": "tsx scripts/migrate.ts && next build",
+    "test:pos": "tsx tests/pos.ts"
   },
   "dependencies": {
     "cross-env": "7.0.3",

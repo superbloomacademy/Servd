@@ -14,6 +14,13 @@ export const CAN = {
   coupons: ['owner', 'manager'],
   team: ['owner'],
   tables: ['owner', 'manager', 'cashier', 'captain'],
+  pos: ['owner', 'manager', 'cashier', 'captain'],          // billing screen: take orders, send KOT
+  settle: ['owner', 'manager', 'cashier', 'captain'],        // take payment, close bills (same people who confirm payments)
+  discount: ['owner', 'manager', 'cashier'],
+  cancelItem: ['owner', 'manager', 'cashier'],
+  cash: ['owner', 'manager', 'cashier'],                     // cash drawer
+  inventory: ['owner', 'manager'],
+  customers: ['owner', 'manager'],
 } satisfies Record<string, StaffRole[]>;
 
 export const ROLE_LABEL: Record<StaffRole, string> = {

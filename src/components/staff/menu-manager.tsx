@@ -1,16 +1,19 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ImagePlus, Pencil, Plus, Trash2 } from 'lucide-react';
+import { FileSpreadsheet, ImagePlus, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { api, rupee, shrinkImage } from '@/lib/client';
 import { Btn, Field, Pill, Sheet, Toggle, VegMark, inputCls } from '@/components/ui/kit';
 import { useConfirm, useToast } from '@/components/ui/providers';
 import { FoodArt } from '@/components/food-art';
 import { PageHead } from './shell';
+import { MenuImport } from './menu-import';
 import type { VenueCtx } from './types';
 
 type Cat = { id: string; name: string; isLive: boolean };
 type Station = { id: string; name: string; isLive: boolean };
-type Item = { id: string; categoryId: string; stationId: string | null; name: string; description: string; pricePaise: number; veg: boolean; imageUrl: string | null; isLive: boolean; tags: string[] };
+type Item = { id: string; categoryId: string; stationId: string | null; name: string; description: string; pricePaise: number; veg: boolean; imageUrl: string | null; isLive: boolean; tags: string[]; variants: VariantRow[]; addonGroups: GroupRow[] };
+type VariantRow = { id?: string; name: string; pricePaise: number };
+type GroupRow = { id?: string; name: string; min: number; max: number; options: { id?: string; name: string; pricePaise: number; veg: boolean }[] };
 const TAGS = [['bestseller', 'Bestseller'], ['must_try', 'Must try'], ['new', 'New'], ['spicy', 'Spicy']] as const;
 
 export function MenuManager({ venue }: { venue: VenueCtx }) {
@@ -20,6 +23,7 @@ export function MenuManager({ venue }: { venue: VenueCtx }) {
   const [items, setItems] = useState<Item[]>([]);
   const [stations, setStations] = useState<Station[]>([]);
   const [edit, setEdit] = useState<Partial<Item> | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const load = useCallback(async () => {
     const r = await api<{ categories: Cat[]; items: Item[]; stations: Station[] }>(`/api/staff/v/${venue.id}/menu`);
@@ -49,7 +53,7 @@ export function MenuManager({ venue }: { venue: VenueCtx }) {
   return (
     <div>
       <PageHead title="Menu" sub="Switch anything off when it runs out. Customers see the change within a second."
-        right={<><Btn tone="outline" onClick={() => addNamed('category')}><Plus size={16} />Category</Btn><Btn tone="dark" onClick={() => setEdit({ veg: true, tags: [], categoryId: cats[0]?.id, stationId: stations[0]?.id ?? null })}><Plus size={16} />Add item</Btn></>} />
+        right={<><Btn tone="outline" onClick={() => setImporting(true)}><FileSpreadsheet size={16} />Upload from Excel</Btn><Btn tone="outline" onClick={() => addNamed('category')}><Plus size={16} />Category</Btn><Btn tone="dark" onClick={() => setEdit({ veg: true, tags: [], categoryId: cats[0]?.id, stationId: stations[0]?.id ?? null })}><Plus size={16} />Add item</Btn></>} />
 
       <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
         <div className="space-y-4">
@@ -67,7 +71,7 @@ export function MenuManager({ venue }: { venue: VenueCtx }) {
                       <FoodArt name={it.name} category={c.name} imageUrl={it.imageUrl} size={48} className={`!rounded-xl ${it.isLive ? '' : 'grayscale opacity-60'}`} />
                       <div className="min-w-0 flex-1">
                         <p className={`flex items-center gap-2 font-semibold ${it.isLive ? '' : 'text-faint'}`}><VegMark veg={it.veg} size={12} /><span className="truncate">{it.name}</span></p>
-                        <p className="tabular text-sm text-muted">{rupee(it.pricePaise)} · {stations.find(s => s.id === it.stationId)?.name || 'No station'}{it.tags.length ? ` · ${it.tags.join(', ').replace('_', ' ')}` : ''}</p>
+                        <p className="tabular text-sm text-muted">{it.variants?.length ? it.variants.map(v => `${v.name} ${rupee(v.pricePaise)}`).join(" / ") : rupee(it.pricePaise)} · {stations.find(s => s.id === it.stationId)?.name || 'No station'}{it.tags.length ? ` · ${it.tags.join(', ').replace('_', ' ')}` : ''}</p>
                       </div>
                       {!it.isLive && <Pill tone="bad">Sold out</Pill>}
                       <Toggle on={it.isLive} onChange={() => toggle('item', it)} label={`${it.name} live`} />
@@ -94,6 +98,7 @@ export function MenuManager({ venue }: { venue: VenueCtx }) {
         </aside>
       </div>
 
+      <MenuImport open={importing} onClose={() => setImporting(false)} venueId={venue.id} onDone={load} />
       <ItemEditor open={!!edit} item={edit} cats={cats} stations={stations} venueId={venue.id} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); load(); }} />
     </div>
   );
@@ -105,9 +110,16 @@ function ItemEditor({ open, item, cats, stations, venueId, onClose, onSaved }: {
   const confirm = useConfirm();
   const toast = useToast();
   const [f, setF] = useState<Partial<Item> & { price?: string }>({});
+  const [sizes, setSizes] = useState<SizeF[]>([]);
+  const [groups, setGroups] = useState<GroupF[]>([]);
   const [busy, setBusy] = useState(false);
   const file = useRef<HTMLInputElement>(null);
-  useEffect(() => { if (item) setF({ ...item, price: item.pricePaise ? String(item.pricePaise / 100) : '' }); }, [item]);
+  useEffect(() => {
+    if (!item) return;
+    setF({ ...item, price: item.pricePaise ? String(item.pricePaise / 100) : '' });
+    setSizes((item.variants || []).map(v => ({ id: v.id, name: v.name, price: String(v.pricePaise / 100) })));
+    setGroups((item.addonGroups || []).map(g => ({ id: g.id, name: g.name, min: String(g.min), max: String(g.max), options: g.options.map(o => ({ id: o.id, name: o.name, price: String(o.pricePaise / 100), veg: o.veg })) })));
+  }, [item]);
   if (!item) return null;
   const isNew = !item.id;
 
@@ -117,14 +129,17 @@ function ItemEditor({ open, item, cats, stations, venueId, onClose, onSaved }: {
     catch (e) { toast((e as Error).message, 'bad'); }
   };
   const save = async () => {
-    const pricePaise = Math.round(Number(f.price) * 100);
-    if (!f.name || !(pricePaise >= 100)) { toast('Enter a name and a price', 'bad'); return; }
+    const variants = sizes.filter(x => x.name.trim() || x.price).map(x => ({ id: x.id, name: x.name.trim(), pricePaise: Math.round(Number(x.price) * 100) }));
+    const addonGroups = groups.map(g => ({ id: g.id, name: g.name.trim(), min: Number(g.min) || 0, max: Number(g.max) || 0,
+      options: g.options.filter(o => o.name.trim()).map(o => ({ id: o.id, name: o.name.trim(), pricePaise: Math.round((Number(o.price) || 0) * 100), veg: o.veg })) }));
+    const pricePaise = variants.length ? Math.min(...variants.map(v => v.pricePaise || 0)) : Math.round(Number(f.price) * 100);
+    if (!f.name || !(pricePaise >= 100)) { toast(variants.length ? 'Give every size a price' : 'Enter a name and a price', 'bad'); return; }
     if (!isNew && item.pricePaise !== pricePaise) {
       const ok = await confirm({ title: `Change the price of ${f.name}?`, body: <>From <b>{rupee(item.pricePaise!)}</b> to <b>{rupee(pricePaise)}</b>. Customers see the new price immediately.</>, confirm: 'Change price', tone: 'primary' });
       if (!ok) return;
     }
     setBusy(true);
-    const body = { name: f.name, description: f.description || '', pricePaise, veg: !!f.veg, categoryId: f.categoryId, stationId: f.stationId || null, imageUrl: f.imageUrl || null, tags: f.tags || [] };
+    const body = { name: f.name, description: f.description || '', pricePaise, veg: !!f.veg, categoryId: f.categoryId, stationId: f.stationId || null, imageUrl: f.imageUrl || null, tags: f.tags || [], variants, addonGroups };
     try {
       if (isNew) await api(`/api/staff/v/${venueId}/menu`, { body: { type: 'item', ...body } });
       else await api(`/api/staff/menu/item/${item.id}`, { method: 'PATCH', body });
@@ -152,7 +167,8 @@ function ItemEditor({ open, item, cats, stations, venueId, onClose, onSaved }: {
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Name" className="sm:col-span-2"><input className={inputCls} value={f.name || ''} onChange={e => setF({ ...f, name: e.target.value })} maxLength={80} /></Field>
-          <Field label="Price (₹)"><input className={inputCls} inputMode="decimal" value={f.price || ''} onChange={e => setF({ ...f, price: e.target.value.replace(/[^\d.]/g, '') })} /></Field>
+          {sizes.length ? <Field label="Price"><p className="py-2.5 text-sm text-muted">Set per size below</p></Field>
+            : <Field label="Price (₹)"><input className={inputCls} inputMode="decimal" value={f.price || ''} onChange={e => setF({ ...f, price: e.target.value.replace(/[^\d.]/g, '') })} /></Field>}
           <Field label="Type"><select className={inputCls} value={f.veg ? '1' : '0'} onChange={e => setF({ ...f, veg: e.target.value === '1' })}><option value="1">Veg</option><option value="0">Non-veg</option></select></Field>
           <Field label="Category"><select className={inputCls} value={f.categoryId || ''} onChange={e => setF({ ...f, categoryId: e.target.value })}>{cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
           <Field label="Kitchen station (KOT)"><select className={inputCls} value={f.stationId || ''} onChange={e => setF({ ...f, stationId: e.target.value || null })}><option value="">None</option>{stations.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
@@ -167,8 +183,63 @@ function ItemEditor({ open, item, cats, stations, venueId, onClose, onSaved }: {
               })}
             </div>
           </div>
+          <OptionsEditor sizes={sizes} setSizes={setSizes} groups={groups} setGroups={setGroups} />
         </div>
       </div>
     </Sheet>
+  );
+}
+
+type SizeF = { id?: string; name: string; price: string };
+type GroupF = { id?: string; name: string; min: string; max: string; options: { id?: string; name: string; price: string; veg: boolean }[] };
+type SetS<T> = React.Dispatch<React.SetStateAction<T>>;
+
+// Sizes (Half / Full, Regular / Large) and add-on groups (Extra toppings, Choose your dip).
+function OptionsEditor({ sizes, setSizes, groups, setGroups }: { sizes: SizeF[]; setSizes: SetS<SizeF[]>; groups: GroupF[]; setGroups: SetS<GroupF[]> }) {
+  const small = 'rounded-lg border border-line px-2.5 py-1.5 text-sm outline-none focus:border-ink';
+  const money = (v: string) => v.replace(/[^\d.]/g, '');
+  const setG = (gi: number, f: (g: GroupF) => GroupF) => setGroups(s => s.map((y, k) => (k === gi ? f(y) : y)));
+  const setO = (gi: number, oi: number, f: (o: GroupF['options'][number]) => GroupF['options'][number]) => setG(gi, g => ({ ...g, options: g.options.map((z, j) => (j === oi ? f(z) : z)) }));
+  return (
+    <div className="space-y-4 border-t border-line pt-4 sm:col-span-2">
+      <div>
+        <p className="text-[13px] font-semibold text-ink-2">Sizes <span className="font-normal text-muted">· e.g. Half / Full. Leave empty for one price.</span></p>
+        {sizes.map((x, i) => (
+          <div key={i} className="mt-2 flex items-center gap-2">
+            <input value={x.name} onChange={e => setSizes(s => s.map((y, k) => (k === i ? { ...y, name: e.target.value } : y)))} placeholder="Size name" aria-label="Size name" className={`${small} flex-1`} maxLength={30} />
+            <span className="text-sm text-muted">₹</span>
+            <input value={x.price} onChange={e => setSizes(s => s.map((y, k) => (k === i ? { ...y, price: money(e.target.value) } : y)))} inputMode="decimal" placeholder="Price" aria-label="Size price" className={`${small} w-24`} />
+            <button type="button" onClick={() => setSizes(s => s.filter((_, k) => k !== i))} className="rounded-lg p-1.5 text-muted hover:bg-soft" aria-label="Remove size"><X size={15} /></button>
+          </div>
+        ))}
+        <button type="button" onClick={() => setSizes(s => [...s, ...(s.length ? [{ name: '', price: '' }] : [{ name: 'Half', price: '' }, { name: 'Full', price: '' }])])}
+          className="mt-2 flex items-center gap-1 text-sm font-semibold text-brand-text"><Plus size={14} />{sizes.length ? 'Add size' : 'Add sizes (Half / Full)'}</button>
+      </div>
+      <div>
+        <p className="text-[13px] font-semibold text-ink-2">Add-ons <span className="font-normal text-muted">· e.g. Extra cheese +₹30, Choose a dip</span></p>
+        {groups.map((g, gi) => (
+          <div key={gi} className="mt-2 rounded-xl border border-line p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <input value={g.name} onChange={e => setG(gi, y => ({ ...y, name: e.target.value }))} placeholder="Group name, e.g. Extra toppings" aria-label="Add-on group name" className={`${small} min-w-40 flex-1`} maxLength={40} />
+              <label className="flex items-center gap-1 text-xs text-muted">Min<input value={g.min} onChange={e => setG(gi, y => ({ ...y, min: e.target.value.replace(/\D/g, '') }))} inputMode="numeric" className={`${small} w-12`} /></label>
+              <label className="flex items-center gap-1 text-xs text-muted">Max<input value={g.max} onChange={e => setG(gi, y => ({ ...y, max: e.target.value.replace(/\D/g, '') }))} inputMode="numeric" className={`${small} w-12`} /></label>
+              <button type="button" onClick={() => setGroups(s => s.filter((_, k) => k !== gi))} className="rounded-lg p-1.5 text-muted hover:bg-soft" aria-label="Remove group"><X size={15} /></button>
+            </div>
+            {g.options.map((o, oi) => (
+              <div key={oi} className="mt-2 flex items-center gap-2 pl-2">
+                <button type="button" onClick={() => setO(gi, oi, z => ({ ...z, veg: !z.veg }))} aria-label={o.veg ? 'Veg (tap for non-veg)' : 'Non-veg (tap for veg)'}><VegMark veg={o.veg} size={13} /></button>
+                <input value={o.name} onChange={e => setO(gi, oi, z => ({ ...z, name: e.target.value }))} placeholder="Choice" aria-label="Add-on name" className={`${small} flex-1`} maxLength={40} />
+                <span className="text-sm text-muted">+₹</span>
+                <input value={o.price} onChange={e => setO(gi, oi, z => ({ ...z, price: money(e.target.value) }))} inputMode="decimal" placeholder="0" aria-label="Add-on price" className={`${small} w-20`} />
+                <button type="button" onClick={() => setG(gi, y => ({ ...y, options: y.options.filter((_, j) => j !== oi) }))} className="rounded-lg p-1.5 text-muted hover:bg-soft" aria-label="Remove choice"><X size={14} /></button>
+              </div>
+            ))}
+            <button type="button" onClick={() => setG(gi, y => ({ ...y, options: [...y.options, { name: '', price: '', veg: true }] }))} className="mt-2 ml-2 flex items-center gap-1 text-xs font-semibold text-brand-text"><Plus size={13} />Add choice</button>
+          </div>
+        ))}
+        <button type="button" onClick={() => setGroups(s => [...s, { name: '', min: '0', max: '', options: [{ name: '', price: '', veg: true }] }])} className="mt-2 flex items-center gap-1 text-sm font-semibold text-brand-text"><Plus size={14} />Add add-on group</button>
+        <p className="mt-1 text-xs text-muted">Min 0 = optional. Max 1 = pick one (like a choice of dip).</p>
+      </div>
+    </div>
   );
 }

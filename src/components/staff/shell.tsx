@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  LayoutDashboard, ListOrdered, ChefHat, Armchair, Footprints, BookOpenText, QrCode, BadgePercent, Users, Settings, MessageCircleQuestion, History, LogOut, Volume2, VolumeX, Pause, Play, Rocket, ReceiptText,
+  LayoutDashboard, ListOrdered, ChefHat, Armchair, Footprints, BookOpenText, QrCode, BadgePercent, Users, Settings, MessageCircleQuestion, History, LogOut, Volume2, VolumeX, Pause, Play, Rocket, ReceiptText, Calculator, BarChart3, Wallet, Boxes, Contact,
 } from 'lucide-react';
 import { api, store, useRealtime } from '@/lib/client';
 import { brandVars } from '@/lib/theme';
@@ -23,25 +23,35 @@ import { Support } from './support';
 import { Activity } from './activity';
 import { GetStarted } from './get-started';
 import { GstBills } from './gst-bills';
+import { Pos } from './pos';
+import { Reports } from './reports';
+import { CashDrawer } from './cash-drawer';
+import { Inventory } from './inventory';
+import { Customers } from './customers';
 
-type Tab = 'setup' | 'gst' | 'dashboard' | 'live' | 'kitchen' | 'tables' | 'runner' | 'menu' | 'qr' | 'coupons' | 'team' | 'settings' | 'support' | 'activity';
+type Tab = 'setup' | 'gst' | 'dashboard' | 'pos' | 'reports' | 'cash' | 'inventory' | 'customers' | 'live' | 'kitchen' | 'tables' | 'runner' | 'menu' | 'qr' | 'coupons' | 'team' | 'settings' | 'support' | 'activity';
 const NAV: { key: Tab; label: string; icon: React.ComponentType<{ size?: number }>; roles: Role[]; modes?: string[] }[] = [
   { key: 'setup', label: 'Get started', icon: Rocket, roles: ['owner', 'manager'] },
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['owner', 'manager'] },
+  { key: 'pos', label: 'Billing', icon: Calculator, roles: ['owner', 'manager', 'cashier', 'captain'] },
+  { key: 'tables', label: 'Tables', icon: Armchair, roles: ['owner', 'manager', 'cashier', 'captain'], modes: ['table_bill', 'table_prepay'] },
   { key: 'live', label: 'Orders & payments', icon: ListOrdered, roles: ['owner', 'manager', 'cashier', 'captain'] },
   { key: 'kitchen', label: 'Kitchen (KOT)', icon: ChefHat, roles: ['owner', 'manager', 'cashier', 'station'] },
-  { key: 'tables', label: 'Tables', icon: Armchair, roles: ['owner', 'manager', 'cashier', 'captain'], modes: ['table_bill', 'table_prepay'] },
   { key: 'runner', label: 'Seat delivery', icon: Footprints, roles: ['owner', 'manager', 'runner', 'captain'], modes: ['seat_delivery'] },
   { key: 'menu', label: 'Menu', icon: BookOpenText, roles: ['owner', 'manager'] },
   { key: 'qr', label: 'QR codes', icon: QrCode, roles: ['owner', 'manager'] },
   { key: 'coupons', label: 'Coupons', icon: BadgePercent, roles: ['owner', 'manager'] },
+  { key: 'reports', label: 'Day-end reports', icon: BarChart3, roles: ['owner', 'manager', 'cashier'] },
+  { key: 'cash', label: 'Cash drawer', icon: Wallet, roles: ['owner', 'manager', 'cashier'] },
+  { key: 'inventory', label: 'Inventory', icon: Boxes, roles: ['owner', 'manager'] },
+  { key: 'customers', label: 'Customers', icon: Contact, roles: ['owner', 'manager'] },
   { key: 'gst', label: 'GST bills', icon: ReceiptText, roles: ['owner', 'manager'] },
   { key: 'support', label: 'Customer help', icon: MessageCircleQuestion, roles: ['owner', 'manager'] },
   { key: 'team', label: 'Staff logins', icon: Users, roles: ['owner'] },
   { key: 'settings', label: 'Settings & brand', icon: Settings, roles: ['owner'] },
   { key: 'activity', label: 'Activity log', icon: History, roles: ['owner', 'manager'] },
 ];
-const HOME: Record<Role, Tab> = { super_admin: 'dashboard', owner: 'dashboard', manager: 'live', cashier: 'live', station: 'kitchen', captain: 'tables', runner: 'runner' };
+const HOME: Record<Role, Tab> = { super_admin: 'dashboard', owner: 'dashboard', manager: 'live', cashier: 'pos', station: 'kitchen', captain: 'tables', runner: 'runner' };
 
 export function StaffShell() {
   const router = useRouter();
@@ -55,6 +65,8 @@ export function StaffShell() {
   const [sound, setSound] = useState(true);
   const [flash, setFlash] = useState<Set<string>>(new Set());
   const [isOpen, setIsOpen] = useState<boolean | null>(null);
+  const [presetSpot, setPresetSpot] = useState<string | null>(null);
+  const clearPreset = useCallback(() => setPresetSpot(null), []);
   const refetch = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -81,7 +93,7 @@ export function StaffShell() {
     if (!me || !venue) return;
     const saved = store.get<Tab | null>(`sv_tab_${role}`, null);
     const home: Tab = settingUp && nav.some(n => n.key === 'setup') ? 'setup' : HOME[role];
-    setTab(t => (t && nav.some(n => n.key === t) ? t : !settingUp && saved && nav.some(n => n.key === saved) ? saved : nav.some(n => n.key === home) ? home : nav[0]?.key ?? 'live'));
+    setTab(t => (t && nav.some(n => n.key === t) ? t : !settingUp && saved && nav.some(n => n.key === saved) ? saved : nav.some(n => n.key === home) ? home : nav.some(n => n.key === 'pos') ? 'pos' : nav[0]?.key ?? 'live'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [me, venue?.id]);
 
@@ -182,7 +194,12 @@ export function StaffShell() {
         {tab === 'dashboard' && <Dashboard venue={venue} />}
         {tab === 'live' && <LiveBoard venue={venue} live={live} role={role} flash={flash} reload={loadLive} />}
         {tab === 'kitchen' && <Kitchen venue={venue} live={live} role={role} myStation={myStation} flash={flash} reload={loadLive} />}
-        {tab === 'tables' && <Tables venue={venue} live={live} reload={loadLive} />}
+        {tab === 'tables' && <Tables venue={venue} live={live} role={role} reload={loadLive} onOrder={sid => { setPresetSpot(sid); go('pos'); }} />}
+        {tab === 'pos' && <Pos venue={venue} live={live} role={role} presetSpot={presetSpot} clearPreset={clearPreset} reload={loadLive} />}
+        {tab === 'reports' && <Reports venue={venue} />}
+        {tab === 'cash' && <CashDrawer venue={venue} />}
+        {tab === 'inventory' && <Inventory venue={venue} />}
+        {tab === 'customers' && <Customers venue={venue} />}
         {tab === 'runner' && <Runner venue={venue} live={live} reload={loadLive} />}
         {tab === 'menu' && <MenuManager venue={venue} />}
         {tab === 'qr' && <SpotsQr venue={venue} />}

@@ -13,7 +13,7 @@ type Stats = {
   byHour: { h: number; orders: number; revenue: number }[];
   byDay: { day: string; orders: number; revenue: number }[];
   prep: { station: string; avgMin: number; n: number }[];
-  settlement: { commissionBps: number; commissionPaise: number; tablesClosed: number };
+  settlement: { commissionBps: number; commissionPaise: number; qrSalesPaise: number; tablesClosed: number };
 };
 const RANGES = [['today', 'Today'], ['7d', '7 days'], ['30d', '30 days'], ['all', 'All time']] as const;
 
@@ -43,14 +43,14 @@ export function Dashboard({ venue }: { venue: VenueCtx }) {
 
           <section className="mt-4 rounded-2xl bg-white p-5">
             <h2 className="font-bold">Online vs cash · settlement</h2>
-            <p className="text-xs text-muted">Testing phase: every payment goes straight to your own UPI or cash drawer. Platform commission is {s.settlement.commissionBps / 100}% of paid orders.</p>
+            <p className="text-xs text-muted">Testing phase: every payment goes straight to your own UPI or cash drawer. Platform commission is {s.settlement.commissionBps / 100}% of orders guests place by QR. Orders you bill at the counter carry no commission.</p>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <Money icon={<Smartphone size={18} />} label="UPI to your account" amount={upi.amount} n={upi.orders} total={s.revenue} color="var(--brand)" />
               <Money icon={<Banknote size={18} />} label="Cash at counter" amount={cash.amount} n={cash.orders} total={s.revenue} color="#1BA672" />
               <div className="rounded-xl bg-soft p-4">
                 <p className="text-sm font-semibold text-ink-2">Platform commission due</p>
                 <p className="tabular mt-1 text-2xl font-extrabold">{rupee(s.settlement.commissionPaise)}</p>
-                <p className="text-xs text-muted">{s.settlement.commissionBps / 100}% of {rupee(s.revenue)}{s.settlement.tablesClosed ? ` · ${s.settlement.tablesClosed} table bills closed` : ''}</p>
+                <p className="text-xs text-muted">{s.settlement.commissionBps / 100}% of {rupee(s.settlement.qrSalesPaise)} QR orders{s.settlement.tablesClosed ? ` · ${s.settlement.tablesClosed} table bills closed` : ''}</p>
               </div>
             </div>
             <div className="mt-4 flex h-3 overflow-hidden rounded-full bg-soft">

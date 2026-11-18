@@ -34,7 +34,7 @@ async function nextSeq(vendorId: string, fy: string) {
   return r[0].last;
 }
 
-type Src = { orders: (typeof schema.orders.$inferSelect)[]; vendor: Vendor; venueId: string; taxBps: number; payMethod: string; spotLabel: string; customerId: string | null };
+type Src = { orders: (typeof schema.orders.$inferSelect)[]; vendor: Vendor; venueId: string; taxBps: number; payMethod: string; payments: schema.Payment[]; spotLabel: string; customerId: string | null };
 
 async function issue(src: Src, link: { orderId?: string; tableSessionId?: string }, at: Date) {
   const ids = src.orders.map(o => o.id);
@@ -42,12 +42,15 @@ async function issue(src: Src, link: { orderId?: string; tableSessionId?: string
   // Merge identical lines (same name and price) across rounds.
   const map = new Map<string, schema.InvoiceLine>();
   for (const i of items) {
-    const k = `${i.name}|${i.pricePaise}`;
+    const name = i.addons?.length ? `${i.name} + ${i.addons.map(a => a.name).join(', ')}` : i.name;
+    const k = `${name}|${i.pricePaise}`;
     const cur = map.get(k);
-    if (cur) cur.qty += i.qty; else map.set(k, { name: i.name, qty: i.qty, pricePaise: i.pricePaise, veg: i.veg });
+    if (cur) cur.qty += i.qty; else map.set(k, { name, qty: i.qty, pricePaise: i.pricePaise, veg: i.veg });
   }
   const sum = (k: 'subtotalPaise' | 'discountPaise' | 'taxPaise' | 'totalPaise') => src.orders.reduce((a, o) => a + o[k], 0);
   const subtotal = sum('subtotalPaise'), discount = sum('discountPaise'), tax = sum('taxPaise'), total = sum('totalPaise');
+  const roundOff = src.orders.reduce((a, o) => a + o.roundOffPaise, 0);
+  const guest = src.orders.find(o => o.guestName || o.guestPhone);
   const cgst = Math.floor(tax / 2);
   const cust = src.customerId ? (await db().select().from(schema.customers).where(eq(schema.customers.id, src.customerId)))[0] : null;
   const fy = fyOf(at);
@@ -56,9 +59,9 @@ async function issue(src: Src, link: { orderId?: string; tableSessionId?: string
   const [inv] = await db().insert(schema.invoices).values({
     vendorId: src.vendor.id, venueId: src.venueId, ...link, customerId: src.customerId, fy, seq, number,
     kotNos: src.orders.map(o => o.kotNo), spotLabel: src.spotLabel,
-    customerName: cust?.name ?? '', customerPhone: cust?.phone ?? '',
+    customerName: cust?.name || guest?.guestName || '', customerPhone: cust?.phone || guest?.guestPhone || '',
     lines: [...map.values()], subtotalPaise: subtotal, discountPaise: discount, taxablePaise: subtotal - discount,
-    taxBps: src.taxBps, cgstPaise: cgst, sgstPaise: tax - cgst, totalPaise: total, payMethod: src.payMethod, issuedAt: at,
+    taxBps: src.taxBps, cgstPaise: cgst, sgstPaise: tax - cgst, roundOffPaise: roundOff, totalPaise: total, payMethod: src.payMethod, payments: src.payments, issuedAt: at,
   }).onConflictDoNothing().returning();
   return inv ?? null;
 }
@@ -71,7 +74,8 @@ export async function issueForOrder(orderId: string, at = new Date()) {
   if (!o || o.payStatus !== 'paid' || o.tableSessionId && o.payMethod === 'bill') return null;
   const venue = (await db().select().from(schema.venues).where(eq(schema.venues.id, o.venueId)))[0];
   const vendor = (await db().select().from(schema.vendors).where(eq(schema.vendors.id, o.vendorId)))[0];
-  return issue({ orders: [o], vendor, venueId: o.venueId, taxBps: venue.taxBps, payMethod: o.payMethod || 'upi_shop', spotLabel: o.spotLabel, customerId: o.customerId },
+  return issue({ orders: [o], vendor, venueId: o.venueId, taxBps: venue.taxBps, payMethod: o.payMethod || 'upi_shop',
+    payments: o.payments.length ? o.payments : [{ method: o.payMethod === 'cash' ? 'cash' : 'upi_shop', amountPaise: o.totalPaise }], spotLabel: o.spotLabel, customerId: o.customerId },
     { orderId: o.id }, at);
 }
 
@@ -90,7 +94,9 @@ export async function issueForTable(tableSessionId: string, at = new Date()) {
   const venue = (await db().select().from(schema.venues).where(eq(schema.venues.id, ts.venueId)))[0];
   const vendor = (await db().select().from(schema.vendors).where(eq(schema.vendors.id, venue.vendorId)))[0];
   const spot = (await db().select().from(schema.spots).where(eq(schema.spots.id, ts.spotId)))[0];
-  return issue({ orders: os, vendor, venueId: venue.id, taxBps: venue.taxBps, payMethod: ts.payMethod || 'cash', spotLabel: spot ? `Table ${spot.label}` : '', customerId: os[0].customerId },
+  return issue({ orders: os, vendor, venueId: venue.id, taxBps: venue.taxBps, payMethod: ts.payMethod || 'cash',
+    payments: ts.payments.length ? ts.payments : [{ method: ts.payMethod === 'upi_shop' ? 'upi_shop' : 'cash', amountPaise: os.reduce((a, o) => a + o.totalPaise, 0) }],
+    spotLabel: spot ? `Table ${spot.label}` : '', customerId: os.find(o => o.customerId)?.customerId ?? null },
     { tableSessionId: ts.id }, at);
 }
 

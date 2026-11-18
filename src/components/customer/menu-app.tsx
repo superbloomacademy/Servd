@@ -11,7 +11,8 @@ import { ItemRow, MiniCard } from './item-parts';
 import { CartSheet } from './cart-sheet';
 import { LoginSheet } from './login-sheet';
 import { TableBillSheet } from './table-bill';
-import { ACTIVE, type Item, type OrderView, type ScanData } from './types';
+import { ACTIVE, hasOpts, lineInfo, lineKey, parseKey, type Item, type OrderView, type ScanData } from './types';
+import { ItemOptions, type OptItem } from '@/components/ui/item-options';
 
 export function MenuApp({ code }: { code: string }) {
   const router = useRouter();
@@ -23,6 +24,7 @@ export function MenuApp({ code }: { code: string }) {
   const [vegOnly, setVegOnly] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [cartOpen, setCartOpen] = useState(false);
+  const [opt, setOpt] = useState<Item | null>(null);
   const [billOpen, setBillOpen] = useState(false);
   const [login, setLogin] = useState<{ then?: () => void; reason?: string } | null>(null);
   const [active, setActive] = useState<OrderView[]>([]);
@@ -41,8 +43,8 @@ export function MenuApp({ code }: { code: string }) {
         const next: Record<string, number> = {};
         const gone: string[] = [];
         for (const [id, q] of Object.entries(saved)) {
-          const it = d.menu.items.find(i => i.id === id);
-          if (it?.available) next[id] = q; else if (it) gone.push(it.name);
+          const it = d.menu.items.find(i => i.id === parseKey(id).itemId);
+          if (it?.available && lineInfo(it, id)) next[id] = q; else if (it) gone.push(it.name);
         }
         if (gone.length) toast(`${gone.join(', ')} just sold out and was removed from your cart`, 'bad');
         return next;
@@ -90,9 +92,13 @@ export function MenuApp({ code }: { code: string }) {
   const { vendor, venue, spot, window: win } = data;
   const canOrder = win.open && !!data.visit;
   const setQty = (id: string, q: number) => setCart(c => { const n = { ...c }; if (q > 0) n[id] = Math.min(30, q); else delete n[id]; return n; });
-  const ctl = (it: Item) => ({ qty: cart[it.id] || 0, onAdd: () => setQty(it.id, 1), onInc: () => setQty(it.id, (cart[it.id] || 0) + 1), onDec: () => setQty(it.id, (cart[it.id] || 0) - 1) });
+  const keysOf = (it: Item) => Object.keys(cart).filter(k => parseKey(k).itemId === it.id);
+  // Items with sizes / add-ons open the options sheet; "−" takes off the last one added.
+  const ctl = (it: Item) => hasOpts(it)
+    ? { qty: keysOf(it).reduce((a, k) => a + cart[k], 0), onAdd: () => setOpt(it), onInc: () => setOpt(it), onDec: () => { const k = keysOf(it).pop(); if (k) setQty(k, cart[k] - 1); } }
+    : { qty: cart[it.id] || 0, onAdd: () => setQty(it.id, 1), onInc: () => setQty(it.id, (cart[it.id] || 0) + 1), onDec: () => setQty(it.id, (cart[it.id] || 0) - 1) };
   const cartCount = Object.values(cart).reduce((a, b) => a + b, 0);
-  const cartTotal = Object.entries(cart).reduce((s, [id, q]) => s + (data.menu.items.find(i => i.id === id)?.pricePaise || 0) * q, 0);
+  const cartTotal = Object.entries(cart).reduce((s, [k, q]) => { const it = data.menu.items.find(i => i.id === parseKey(k).itemId); const inf = it && lineInfo(it, k); return s + (inf ? inf.unitPaise : 0) * q; }, 0);
   const popular = data.mostOrdered.map(id => data.menu.items.find(i => i.id === id)).filter((i): i is Item => !!i && i.available && (!vegOnly || i.veg)).slice(0, 8);
   const spotText = spot.kind === 'seat' ? `${spot.areaName} · Seat ${spot.label}` : spot.kind === 'table' ? `Table ${spot.label}` : spot.kind === 'shop' ? 'Order at the counter' : spot.label;
   const SpotIcon = spot.kind === 'seat' ? Armchair : spot.kind === 'table' ? MapPin : Store;
@@ -230,6 +236,8 @@ export function MenuApp({ code }: { code: string }) {
         </ul>
       </Sheet>
 
+      <ItemOptions item={opt as OptItem | null} open={!!opt} onClose={() => setOpt(null)} cta="Add to cart"
+        onAdd={pk => { if (!opt) return; const k = lineKey(opt.id, pk.variantId, pk.addonIds); setQty(k, (cart[k] || 0) + pk.qty); }} />
       <CartSheet open={cartOpen} onClose={() => setCartOpen(false)} data={data} cart={cart} setQty={setQty} catName={catName}
         onNeedLogin={then => setLogin({ then, reason: 'Log in to place your order. We use your number to send you the order status and to keep your orders safe.' })}
         onPlaced={o => { setCart({}); store.set(`sv_cart_${venue.id}`, {}); setCartOpen(false); router.push(`/o/${o.id}`); }}

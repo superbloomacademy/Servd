@@ -29,8 +29,10 @@ export const GET = route<{ venueId: string }>(async (req, { venueId }) => {
     customers: sql<number>`count(distinct ${schema.orders.customerId})::int`,
   }).from(schema.orders).where(paid);
 
-  const byMethod = await d.select({ method: schema.orders.payMethod, orders: sql<number>`count(*)::int`, amount: sql<number>`sum(${schema.orders.totalPaise})::int` })
-    .from(schema.orders).where(paid).groupBy(schema.orders.payMethod);
+  // By payment mode, from the GST bills (split payments counted in each mode).
+  const byMethod = (await d.execute(sql`select p->>'method' as method, count(distinct i.id)::int as orders, sum((p->>'amountPaise')::int)::int as amount
+    from invoices i, jsonb_array_elements(i.payments) p where i.venue_id = ${venueId} and i.status = 'issued' and i.issued_at >= ${start} group by 1`)).rows as { method: string; orders: number; amount: number }[];
+  const [qr] = await d.select({ amount: sql<number>`coalesce(sum(${schema.orders.totalPaise}),0)::int` }).from(schema.orders).where(and(paid, eq(schema.orders.channel, 'qr')));
 
   const topItems = await d.select({ name: schema.orderItems.name, qty: sql<number>`sum(${schema.orderItems.qty})::int`, revenue: sql<number>`sum(${schema.orderItems.qty} * ${schema.orderItems.pricePaise})::int` })
     .from(schema.orderItems).innerJoin(schema.orders, eq(schema.orderItems.orderId, schema.orders.id)).where(paid)
@@ -55,11 +57,11 @@ export const GET = route<{ venueId: string }>(async (req, { venueId }) => {
   const tables = await d.select({ n: sql<number>`count(*)::int`, amount: sql<number>`coalesce(sum(${schema.tableSessions.totalPaise}),0)::int` })
     .from(schema.tableSessions).where(and(eq(schema.tableSessions.venueId, venueId), eq(schema.tableSessions.status, 'closed'), gte(schema.tableSessions.closedAt, start)));
 
-  const commission = Math.round(totals.revenue * (vendorRow?.commissionBps || 0) / 10000);
+  const commission = Math.round(qr.amount * (vendorRow?.commissionBps || 0) / 10000);
   return {
     range, ...totals, aov: totals.orders ? Math.round(totals.revenue / totals.orders) : 0,
     repeatCustomers: (repeat.rows[0] as { n: number })?.n ?? 0, liveOrders: live[0].n,
     byMethod, topItems, byHour: byHour.sort((a, b) => a.h - b.h), byDay, prep,
-    settlement: { commissionBps: vendorRow?.commissionBps || 0, commissionPaise: commission, tablesClosed: tables[0].n },
+    settlement: { commissionBps: vendorRow?.commissionBps || 0, commissionPaise: commission, qrSalesPaise: qr.amount, tablesClosed: tables[0].n },
   };
 });

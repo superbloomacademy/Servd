@@ -10,6 +10,8 @@ import { localParts } from './util';
 import type { Staff } from './auth';
 import { audit } from './audit';
 import { cancelForOrder, issueForOrder, issueForTable } from './invoices';
+import { consumeStock, returnStock } from './stock';
+import type { Payment } from '@/db/schema';
 
 type Tx = Parameters<Parameters<DB['transaction']>[0]>[0];
 type Venue = typeof schema.venues.$inferSelect;
@@ -27,7 +29,11 @@ export async function nextNumber(tx: Tx | DB, venueId: string, kind: 'kot' | 'bi
 }
 
 // ---------------------------------------------------------------- pricing & coupons
-export async function priceCart(venue: Venue, lines: { itemId: string; qty: number }[]) {
+/** One cart line: an item, its size (if it has sizes), chosen add-ons and a note for the kitchen. */
+export type CartLine = { itemId: string; qty: number; variantId?: string | null; addonIds?: string[]; note?: string };
+export type PricedLine = Awaited<ReturnType<typeof priceCart>>['lines'][number];
+
+export async function priceCart(venue: Venue, lines: CartLine[]) {
   const ids = [...new Set(lines.map(l => l.itemId))].filter(x => /^[0-9a-f-]{36}$/.test(x));
   if (!ids.length) throw bad('Your cart is empty.');
   const rows = await db().select({ item: schema.items, cat: schema.categories, st: schema.stations })
@@ -38,15 +44,63 @@ export async function priceCart(venue: Venue, lines: { itemId: string; qty: numb
   const out = [];
   for (const l of lines) {
     const r = rows.find(x => x.item.id === l.itemId);
-    const qty = Math.max(0, Math.min(30, Math.floor(Number(l.qty) || 0)));
+    const qty = Math.max(0, Math.min(99, Math.floor(Number(l.qty) || 0)));
     if (!r || !qty) continue;
     const live = r.item.isLive && r.cat.isLive && (r.st ? r.st.isLive : true);
     if (!live) throw bad(`${r.item.name} just sold out. Remove it from your cart to continue.`, 'SOLD_OUT');
-    out.push({ item: r.item, station: r.st, qty });
+    // Size: required when the item has sizes.
+    let variant: schema.ItemVariant | null = null;
+    if (r.item.variants.length) {
+      variant = r.item.variants.find(v => v.id === l.variantId) ?? null;
+      if (!variant) throw bad(`Choose a size for ${r.item.name}.`, 'CHOOSE_SIZE');
+    }
+    // Add-ons: each group's min/max is checked.
+    const picked = [...new Set((l.addonIds || []).map(String))];
+    const addons: { name: string; pricePaise: number }[] = [];
+    for (const g of r.item.addonGroups) {
+      const chosen = g.options.filter(o => picked.includes(o.id));
+      if (chosen.length < g.min) throw bad(`Choose at least ${g.min} in “${g.name}” for ${r.item.name}.`, 'CHOOSE_ADDON');
+      if (g.max && chosen.length > g.max) throw bad(`Choose at most ${g.max} in “${g.name}” for ${r.item.name}.`, 'CHOOSE_ADDON');
+      addons.push(...chosen.map(o => ({ name: o.name, pricePaise: o.pricePaise })));
+    }
+    const unit = (variant ? variant.pricePaise : r.item.pricePaise) + addons.reduce((a, x) => a + x.pricePaise, 0);
+    out.push({
+      item: r.item, station: r.st, qty, variant, addons, unitPaise: unit,
+      name: variant ? `${r.item.name} (${variant.name})` : r.item.name,
+      note: String(l.note || '').trim().slice(0, 120),
+    });
   }
   if (!out.length) throw bad('Your cart is empty.');
-  const subtotal = out.reduce((s, l) => s + l.item.pricePaise * l.qty, 0);
+  const subtotal = out.reduce((s, l) => s + l.unitPaise * l.qty, 0);
   return { lines: out, subtotal };
+}
+
+/** GST on the amount after discount, then optional rounding to the nearest rupee. */
+export function computeTotals(subtotal: number, discount: number, taxBps: number, roundOff: boolean) {
+  const taxable = Math.max(0, subtotal - discount);
+  const tax = Math.round(taxable * taxBps / 10000);
+  const raw = taxable + tax;
+  const total = roundOff ? Math.round(raw / 100) * 100 : raw;
+  return { tax, roundOff: total - raw, total };
+}
+export const roundsOff = (v: Venue) => v.settings.roundOff === true;
+
+/** Display name of an order line with its add-ons: "Pizza (Large) + Extra cheese". */
+export const lineName = (i: { name: string; addons?: { name: string }[] | null }) =>
+  i.addons?.length ? `${i.name} + ${i.addons.map(a => a.name).join(', ')}` : i.name;
+
+type Tx2 = Tx | DB;
+/** Saves the order lines and one KOT per station. */
+export async function writeLinesAndKots(tx: Tx2, orderId: string, venueId: string, lines: PricedLine[], release: boolean) {
+  await tx.insert(schema.orderItems).values(lines.map(l => ({
+    orderId, itemId: l.item.id, stationId: l.station?.id ?? null, name: l.name, pricePaise: l.unitPaise, qty: l.qty, veg: l.item.veg,
+    variantId: l.variant?.id ?? null, variantName: l.variant?.name ?? null, addons: l.addons, note: l.note,
+  })));
+  const byStation = new Map<string, string>();
+  for (const l of lines) byStation.set(l.station?.id ?? 'none', l.station?.name ?? 'Kitchen');
+  await tx.insert(schema.kots).values([...byStation].map(([sid, name]) => ({
+    orderId, venueId, stationId: sid === 'none' ? null : sid, stationName: name, status: release ? 'new' as const : 'held' as const,
+  })));
 }
 
 export type CouponCheck = { ok: true; code: string; discount: number; description: string } | { ok: false; error: string; code?: string };
@@ -95,7 +149,7 @@ export async function couponSuggestions(venue: Venue, subtotal: number, customer
 export async function createOrder(input: {
   venue: Venue; vendorId: string; visit: typeof schema.visits.$inferSelect; spot: typeof schema.spots.$inferSelect;
   tableSession: typeof schema.tableSessions.$inferSelect | null; showLabel: string | null; intervalAt: Date | null;
-  customer: { id: string; name: string }; lines: { itemId: string; qty: number }[];
+  customer: { id: string; name: string }; lines: CartLine[];
   couponCode?: string | null; deliverAt?: 'now' | 'interval'; note?: string; payMethod?: 'upi_shop' | 'cash'; areaName?: string | null;
 }) {
   const { venue } = input;
@@ -106,8 +160,7 @@ export async function createOrder(input: {
     if (!c.ok) throw bad(c.error);
     discount = c.discount; couponCode = c.code;
   }
-  const tax = Math.round((subtotal - discount) * venue.taxBps / 10000);
-  const total = subtotal - discount + tax;
+  const { tax, roundOff, total } = computeTotals(subtotal, discount, venue.taxBps, roundsOff(venue));
   const running = venue.serviceMode === 'table_bill';
   const payMethod: PayMethod = running ? 'bill' : input.payMethod === 'cash' ? 'cash' : 'upi_shop';
   if (payMethod === 'cash' && !venue.settings.acceptCash) throw bad('This venue accepts UPI only.');
@@ -126,19 +179,11 @@ export async function createOrder(input: {
       tableSessionId: input.tableSession?.id ?? null, kotNo: n, businessDate: date, status,
       payStatus: running ? 'on_bill' : 'unpaid', payMethod, fulfilment, deliverAt, releaseAt,
       showLabel: input.showLabel, spotLabel: spotLabel(input.spot, venue, input.areaName ?? undefined),
-      subtotalPaise: subtotal, discountPaise: discount, taxPaise: tax, totalPaise: total, couponCode,
+      subtotalPaise: subtotal, discountPaise: discount, taxPaise: tax, roundOffPaise: roundOff, totalPaise: total, couponCode,
       note: String(input.note || '').slice(0, 200), timeline: [tl(status)],
     }).returning();
-    await tx.insert(schema.orderItems).values(lines.map(l => ({
-      orderId: o.id, itemId: l.item.id, stationId: l.station?.id ?? null, name: l.item.name, pricePaise: l.item.pricePaise, qty: l.qty, veg: l.item.veg,
-    })));
-    // One KOT per station.
-    const byStation = new Map<string, string>();
-    for (const l of lines) byStation.set(l.station?.id ?? 'none', l.station?.name ?? 'Kitchen');
     const releaseNow = (running || venue.settings.startBeforePayment) && deliverAt === 'now';
-    await tx.insert(schema.kots).values([...byStation].map(([sid, name]) => ({
-      orderId: o.id, venueId: venue.id, stationId: sid === 'none' ? null : sid, stationName: name, status: releaseNow ? 'new' as const : 'held' as const,
-    })));
+    await writeLinesAndKots(tx, o.id, venue.id, lines, releaseNow);
     if (running && couponCode) await tx.update(schema.coupons).set({ used: sql`${schema.coupons.used} + 1` })
       .where(and(eq(schema.coupons.vendorId, venue.vendorId), eq(schema.coupons.code, couponCode)));
     if (input.tableSession?.status === 'bill_requested') {
@@ -146,6 +191,7 @@ export async function createOrder(input: {
     }
     return o;
   });
+  await consumeStock(order.id);
   await broadcastOrder(order.id, 'new');
   return order;
 }
@@ -186,7 +232,7 @@ export function customerView(o: FullOrder) {
     subtotalPaise: o.subtotalPaise, discountPaise: o.discountPaise, taxPaise: o.taxPaise, totalPaise: o.totalPaise,
     couponCode: o.couponCode, note: o.note, rejectReason: o.rejectReason, timeline: o.timeline, createdAt: o.createdAt,
     tableSessionId: o.tableSessionId, utrLast4: o.utrLast4,
-    items: o.items.map(i => ({ name: i.name, qty: i.qty, pricePaise: i.pricePaise, veg: i.veg })),
+    items: o.items.map(i => ({ name: lineName(i), qty: i.qty, pricePaise: i.pricePaise, veg: i.veg, note: i.note })),
   };
 }
 
@@ -234,6 +280,7 @@ export async function confirmPayment(orderId: string, s: Staff) {
   await db().transaction(async tx => {
     await tx.update(schema.orders).set({
       payStatus: 'paid', paidAt: new Date(), paidConfirmedBy: s.id, status: 'confirmed',
+      payments: [{ method: o.payMethod === 'cash' ? 'cash' : 'upi_shop', amountPaise: o.totalPaise }],
       timeline: [...o.timeline, tl('paid', s.name), tl('confirmed', s.name)],
     }).where(eq(schema.orders.id, o.id));
     if (o.couponCode) await tx.update(schema.coupons).set({ used: sql`${schema.coupons.used} + 1` })
@@ -265,6 +312,7 @@ export async function staffAdvance(orderId: string, to: 'preparing' | 'ready' | 
   if (['cancelled', 'rejected', 'delivered'].includes(o.status)) throw bad(`Order KOT ${o.kotNo} is already ${o.status}.`);
   if (o.status === 'awaiting_payment' && o.payStatus !== 'on_bill') throw bad(`KOT ${o.kotNo} is not paid yet. Confirm the payment first.`);
   if (to === 'out' && o.fulfilment !== 'seat') throw bad('Only seat-delivery orders go "out".');
+  if (to === 'delivered' && o.payStatus === 'unpaid') throw bad(`KOT ${o.kotNo} is not paid yet. Settle the bill first.`);
   if (to === 'ready' || to === 'preparing') {
     await db().update(schema.kots).set(to === 'ready' ? { status: 'ready', readyAt: new Date() } : { status: 'preparing', startedAt: new Date() })
       .where(and(eq(schema.kots.orderId, o.id), ne(schema.kots.status, 'held')));
@@ -281,6 +329,7 @@ export async function rejectOrder(orderId: string, reason: string, s: Staff) {
   await audit(s, { action: 'order_rejected', entity: 'order', entityId: o.id, venueId: o.venueId,
     after: { kotNo: o.kotNo, reason, paid: o.payStatus === 'paid', amountPaise: o.totalPaise } });
   if (o.payStatus === 'paid') await cancelForOrder(o.id);
+  await returnStock(o.id, s.name);
   return broadcastOrder(o.id);
 }
 
@@ -289,6 +338,7 @@ export async function customerCancel(orderId: string, customerId: string) {
   if (!o) throw notFound('Order not found');
   if (o.status !== 'awaiting_payment' || o.payStatus !== 'unpaid') throw bad('This order can no longer be cancelled from the app. Please talk to the staff.');
   await setStatus(o, 'cancelled');
+  await returnStock(o.id, 'customer');
   return broadcastOrder(o.id);
 }
 
@@ -303,9 +353,13 @@ export async function tableBill(tableSessionId: string) {
   const spot = (await db().select().from(schema.spots).where(eq(schema.spots.id, ts.spotId)))[0];
   return {
     session: ts, spotLabel: spot ? `Table ${spot.label}` : '',
-    rounds: os.map(o => ({ id: o.id, kotNo: o.kotNo, status: o.status, createdAt: o.createdAt, totalPaise: o.totalPaise,
-      items: o.items.map(i => ({ name: i.name, qty: i.qty, pricePaise: i.pricePaise, veg: i.veg })) })),
+    rounds: os.map(o => ({ id: o.id, kotNo: o.kotNo, status: o.status, createdAt: o.createdAt, totalPaise: o.totalPaise, payStatus: o.payStatus,
+      channel: o.channel, discountReason: o.discountReason,
+      items: o.items.map(i => ({ id: i.id, name: lineName(i), qty: i.qty, pricePaise: i.pricePaise, veg: i.veg, note: i.note })) })),
     subtotalPaise: sum('subtotalPaise'), discountPaise: sum('discountPaise'), taxPaise: sum('taxPaise'), totalPaise: sum('totalPaise'),
+    roundOffPaise: os.reduce((a, o) => a + o.roundOffPaise, 0),
+    // What is still to be paid at the table (rounds already paid one by one are not counted again).
+    duePaise: os.filter(o => o.payStatus === 'on_bill').reduce((a, o) => a + o.totalPaise, 0),
   };
 }
 
@@ -316,13 +370,16 @@ export async function broadcastTable(tableSessionId: string, kind = 'update') {
   emit(`venue:${ts.venueId}`, 'table', { tableSessionId: ts.id, kind });
 }
 
-export async function closeTable(tableSessionId: string, s: Staff, method: 'upi_shop' | 'cash') {
+export async function closeTable(tableSessionId: string, s: Staff, methodOrPayments: 'upi_shop' | 'cash' | Payment[]) {
   const bill = await tableBill(tableSessionId);
-  if (bill.session.status === 'closed') throw bad('This table is already closed.');
+  if (bill.session.status === 'closed' || bill.session.status === 'merged') throw bad('This table is already closed.');
+  const payments: Payment[] = Array.isArray(methodOrPayments) ? methodOrPayments : bill.duePaise ? [{ method: methodOrPayments, amountPaise: bill.duePaise }] : [];
+  checkPayments(payments, bill.duePaise);
+  const method = payMethodOf(payments);
   const { n } = await nextNumber(db(), bill.session.venueId, 'bill');
   await db().transaction(async tx => {
     await tx.update(schema.tableSessions).set({
-      status: 'closed', payStatus: 'paid', payMethod: method, billNo: n, totalPaise: bill.totalPaise, paidConfirmedBy: s.id, closedAt: new Date(),
+      status: 'closed', payStatus: 'paid', payMethod: method, payments, billNo: n, totalPaise: bill.duePaise, paidConfirmedBy: s.id, closedAt: new Date(),
     }).where(eq(schema.tableSessions.id, tableSessionId));
     await tx.update(schema.orders).set({ payStatus: 'paid', paidAt: new Date(), paidConfirmedBy: s.id, payMethod: method })
       .where(and(eq(schema.orders.tableSessionId, tableSessionId), eq(schema.orders.payStatus, 'on_bill')));
@@ -330,8 +387,8 @@ export async function closeTable(tableSessionId: string, s: Staff, method: 'upi_
     await tx.update(schema.visits).set({ expiresAt: new Date() }).where(eq(schema.visits.tableSessionId, tableSessionId));
     await tx.update(schema.serviceRequests).set({ status: 'done' }).where(eq(schema.serviceRequests.tableSessionId, tableSessionId));
   });
-  await audit(s, { action: method === 'cash' ? 'table_closed_cash' : 'table_closed_upi', entity: 'table_session', entityId: tableSessionId,
-    venueId: bill.session.venueId, after: { billNo: n, totalPaise: bill.totalPaise, spot: bill.spotLabel } });
+  await audit(s, { action: method === 'cash' ? 'table_closed_cash' : method === 'split' ? 'table_closed_split' : `table_closed_${method === 'upi_shop' ? 'upi' : method}`,
+    entity: 'table_session', entityId: tableSessionId, venueId: bill.session.venueId, after: { billNo: n, totalPaise: bill.duePaise, spot: bill.spotLabel, payments } });
   await issueForTable(tableSessionId);
   await broadcastTable(tableSessionId, 'closed');
 }
@@ -361,3 +418,18 @@ export async function boughtTogether(venueId: string, itemIds: string[], limit =
     group by b.item_id order by n desc limit ${limit}`);
   return (r.rows as { itemId: string; n: number }[]);
 }
+
+// ---------------------------------------------------------------- payments
+const METHODS = ['upi_shop', 'cash', 'card', 'online'] as const;
+/** Payments must be real methods with positive amounts and add up exactly to what is due. */
+export function checkPayments(payments: Payment[], due: number) {
+  if (!payments.length && due > 0) throw bad('Choose how the guest paid.');
+  for (const p of payments) {
+    if (!METHODS.includes(p.method)) throw bad('Unknown payment method');
+    if (!Number.isInteger(p.amountPaise) || p.amountPaise <= 0) throw bad('Each payment needs an amount.');
+  }
+  const sum = payments.reduce((a, p) => a + p.amountPaise, 0);
+  if (sum !== due) throw bad(`Payments add up to ₹${(sum / 100).toFixed(2)} but the bill is ₹${(due / 100).toFixed(2)}.`);
+}
+export const payMethodOf = (payments: Payment[]) =>
+  (new Set(payments.map(p => p.method)).size > 1 ? 'split' : payments[0]?.method ?? 'cash') as 'upi_shop' | 'cash' | 'card' | 'online' | 'split';

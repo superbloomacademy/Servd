@@ -8,7 +8,10 @@ import { createOrder, customerView, getFullOrder } from '@/lib/orders';
 
 const Input = z.object({
   visitId: z.string(),
-  lines: z.array(z.object({ itemId: z.string(), qty: z.number().int().min(1).max(30) })).min(1, 'Your cart is empty.').max(40),
+  lines: z.array(z.object({
+    itemId: z.string(), qty: z.number().int().min(1).max(30),
+    variantId: z.string().max(40).nullish(), addonIds: z.array(z.string().max(40)).max(20).optional(), note: z.string().max(120).optional(),
+  })).min(1, 'Your cart is empty.').max(40),
   couponCode: z.string().max(30).nullish(),
   deliverAt: z.enum(['now', 'interval']).optional(),
   note: z.string().max(200).optional(),

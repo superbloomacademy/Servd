@@ -5,7 +5,32 @@ export type Venue = {
   city: string | null; taxBps: number; upiId: string | null; upiName: string | null; upiQrUrl: string | null;
   acceptCash: boolean; unpaidCancelMin: number; openTime: string; closeTime: string;
 };
-export type Item = { id: string; categoryId: string; name: string; description: string; pricePaise: number; veg: boolean; imageUrl: string | null; tags: string[]; available: boolean };
+export type Item = {
+  id: string; categoryId: string; name: string; description: string; pricePaise: number; veg: boolean; imageUrl: string | null; tags: string[]; available: boolean;
+  variants: { id: string; name: string; pricePaise: number }[];
+  addonGroups: { id: string; name: string; min: number; max: number; options: { id: string; name: string; pricePaise: number; veg: boolean }[] }[];
+};
+
+// Cart keys: a plain item id, or "itemId~variantId~addon1.addon2" for an item with a size / add-ons.
+export const lineKey = (itemId: string, variantId: string | null, addonIds: string[]) =>
+  !variantId && !addonIds.length ? itemId : `${itemId}~${variantId || ''}~${[...addonIds].sort().join('.')}`;
+export function parseKey(k: string) {
+  const [itemId, v = '', a = ''] = k.split('~');
+  return { itemId, variantId: v || null, addonIds: a ? a.split('.') : [] };
+}
+/** Unit price and label of a cart line, or null if the size / add-on no longer exists. */
+export function lineInfo(item: Item, key: string) {
+  const { variantId, addonIds } = parseKey(key);
+  const v = variantId ? item.variants?.find(x => x.id === variantId) : null;
+  if (variantId && !v) return null;
+  if (!variantId && item.variants?.length) return null;
+  const opts = (item.addonGroups || []).flatMap(g => g.options);
+  const adds = addonIds.map(id => opts.find(o => o.id === id));
+  if (adds.some(a => !a)) return null;
+  const extra = [v?.name, ...adds.map(a => a!.name)].filter(Boolean).join(', ');
+  return { unitPaise: (v ? v.pricePaise : item.pricePaise) + adds.reduce((x, a) => x + a!.pricePaise, 0), extra, variantId, addonIds };
+}
+export const hasOpts = (i: Item) => !!(i.variants?.length || i.addonGroups?.length);
 export type Show = { movie: string; time: string; started: boolean; minutesToInterval: number; minutesToEnd: number; intervalAt: string };
 export type ScanData = {
   vendor: Vendor; venue: Venue;

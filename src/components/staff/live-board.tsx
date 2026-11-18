@@ -5,6 +5,7 @@ import { api } from '@/lib/client';
 import { Btn, Empty, inputCls } from '@/components/ui/kit';
 import { useToast } from '@/components/ui/providers';
 import { OrderButtons, OrderCard, useOrderActions } from './order-parts';
+import { PaySheet } from './pay-sheet';
 import { PageHead } from './shell';
 import type { Live, Order, Role, VenueCtx } from './types';
 
@@ -21,6 +22,12 @@ export function LiveBoard({ venue, live, role, flash, reload }: { venue: VenueCt
   const [kotQ, setKotQ] = useState('');
   const [found, setFound] = useState<Order | null>(null);
   const [mobileCol, setMobileCol] = useState(0);
+  const [settle, setSettle] = useState<Order | null>(null);
+  const doSettle = async (p: unknown) => {
+    if (!settle) return;
+    try { await api(`/api/staff/orders/${settle.id}`, { body: { action: 'settle', payments: p } }); toast(`KOT ${settle.kotNo} paid`); setSettle(null); reload(); }
+    catch (e) { toast((e as Error).message, 'bad'); }
+  };
   const seat = venue.serviceMode === 'seat_delivery';
 
   const cols = useMemo(() => {
@@ -59,7 +66,7 @@ export function LiveBoard({ venue, live, role, flash, reload }: { venue: VenueCt
       {foundLive && (
         <div className="mb-5 max-w-md">
           <div className="mb-2 flex items-center justify-between"><h2 className="font-bold">KOT {foundLive.kotNo}</h2><button onClick={() => { setFound(null); setKotQ(''); }} className="text-sm font-semibold text-muted">Close</button></div>
-          <OrderCard o={foundLive} flash><OrderButtons o={foundLive} actions={actions} can={can} /></OrderCard>
+          <OrderCard o={foundLive} flash><OrderButtons o={foundLive} actions={actions} can={can} onSettle={setSettle} /></OrderCard>
         </div>
       )}
 
@@ -78,7 +85,7 @@ export function LiveBoard({ venue, live, role, flash, reload }: { venue: VenueCt
               {c.list.map(o => (
                 <OrderCard key={o.id} o={o} flash={flash.has(o.id)}>
                   {c.key === 'done' ? <span className={`text-xs font-semibold ${o.status === 'delivered' ? 'text-good' : 'text-bad'}`}>{o.status === 'delivered' ? (o.fulfilment === 'pickup' ? 'Handed over' : 'Delivered') : o.status === 'cancelled' ? `Cancelled${o.rejectReason ? ' · ' + o.rejectReason : ''}` : `Rejected · ${o.rejectReason}`}</span>
-                    : <OrderButtons o={o} actions={actions} can={can} />}
+                    : <OrderButtons o={o} actions={actions} can={can} onSettle={setSettle} />}
                 </OrderCard>
               ))}
               {!c.list.length && <div className="rounded-2xl border border-dashed border-line bg-white/60"><Empty title="Nothing here" /></div>}
@@ -86,6 +93,8 @@ export function LiveBoard({ venue, live, role, flash, reload }: { venue: VenueCt
           </section>
         ))}
       </div>
+      <PaySheet open={!!settle} onClose={() => setSettle(null)} title={settle ? `Settle KOT ${settle.kotNo} · ${settle.spotLabel}` : ''} amountPaise={settle?.totalPaise ?? 0}
+        showOnline={!!settle && settle.channel !== 'qr' && settle.channel !== 'pos'} onPay={doSettle} />
     </div>
   );
 }

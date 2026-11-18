@@ -5,6 +5,7 @@ import { inWords, type Invoice } from '@/lib/invoices';
 import { PrintBar } from '../../print-bar';
 
 export const dynamic = 'force-dynamic';
+const PAY: Record<string, string> = { cash: 'cash', upi_shop: 'UPI', card: 'card', online: 'online (app)' };
 const r = (p: number) => (p / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // GST bill. The link works with a bill id, an order id or a table bill id, so every screen can link to it.
@@ -74,9 +75,10 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
           <div className="flex justify-between"><span>CGST @ {half}%</span><span>{r(inv.cgstPaise)}</span></div>
           <div className="flex justify-between"><span>SGST @ {half}%</span><span>{r(inv.sgstPaise)}</span></div>
         </>}
+        {inv.roundOffPaise !== 0 && <div className="flex justify-between"><span>Round off</span><span>{inv.roundOffPaise > 0 ? '+' : '-'}{r(Math.abs(inv.roundOffPaise))}</span></div>}
         <div className="mt-1 flex justify-between border-t border-black pt-1 text-[15px] font-bold"><span>TOTAL</span><span>₹{r(inv.totalPaise)}</span></div>
         <p className="mt-1 text-[11px]">{inWords(inv.totalPaise)}</p>
-        <p className="mt-1">Paid by {inv.payMethod === 'cash' ? 'cash' : 'UPI'}</p>
+        <p className="mt-1">Paid by {inv.payments.length > 1 ? inv.payments.map(p => `${PAY[p.method] || p.method} ₹${r(p.amountPaise)}`).join(' + ') : PAY[inv.payments[0]?.method || inv.payMethod] || 'UPI'}</p>
         {inv.taxBps > 0 && <p className="text-[10px]">SAC 996331 · Restaurant service</p>}
         {inv.status === 'cancelled' && <p className="mt-1 font-bold">This bill was cancelled{inv.cancelledAt ? ` on ${new Date(inv.cancelledAt).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}` : ''}.</p>}
         <p className="mt-3 text-center">Thank you! Visit again.</p>

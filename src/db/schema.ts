@@ -1,7 +1,7 @@
 // Database schema. All money is stored in PAISE (integer) to avoid rounding errors.
 // Every business record carries vendorId and/or venueId, so many vendors share one database safely.
 import {
-  pgTable, uuid, text, integer, boolean, timestamp, jsonb, serial, bigserial, customType, primaryKey, uniqueIndex, index,
+  pgTable, uuid, text, integer, boolean, timestamp, jsonb, serial, bigserial, customType, primaryKey, uniqueIndex, index, doublePrecision,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 
@@ -83,6 +83,7 @@ export type VenueSettings = {
   sessionHours: number;         // a visit session never lasts longer than this
   pauseLastMin: number;         // theaters: stop orders N minutes before the show ends (0 = off)
   showWindowBeforeMin: number;  // theaters: ordering opens N minutes before show start
+  roundOff?: boolean;           // round every bill to the nearest rupee (off when missing)
 };
 export const defaultSettings: VenueSettings = {
   acceptCash: true, unpaidCancelMin: 10, startBeforePayment: false, rescanMinutes: 90,
@@ -171,9 +172,16 @@ export const items = pgTable('items', {
   imageUrl: text('image_url'),
   isLive: boolean('is_live').notNull().default(true),
   tags: text('tags').array().notNull().default([]),   // bestseller | new | spicy | must_try
+  // Sizes like Half / Full, each with its own price. Empty = one price (pricePaise).
+  variants: jsonb('variants').$type<ItemVariant[]>().notNull().default([]),
+  // Add-on groups like "Extra toppings" (choose 0-3). Empty = none.
+  addonGroups: jsonb('addon_groups').$type<AddonGroup[]>().notNull().default([]),
   sort: integer('sort').notNull().default(0),
   createdAt: created(),
 }, t => [index('items_venue_idx').on(t.venueId)]);
+export type ItemVariant = { id: string; name: string; pricePaise: number };
+export type AddonOption = { id: string; name: string; pricePaise: number; veg: boolean };
+export type AddonGroup = { id: string; name: string; min: number; max: number; options: AddonOption[] };
 
 // ---------------------------------------------------------------- people
 export type StaffRole = 'super_admin' | 'owner' | 'manager' | 'cashier' | 'station' | 'captain' | 'runner';
@@ -234,9 +242,13 @@ export const tableSessions = pgTable('table_sessions', {
   id: id(),
   venueId: uuid('venue_id').notNull().references(() => venues.id, { onDelete: 'cascade' }),
   spotId: uuid('spot_id').notNull().references(() => spots.id, { onDelete: 'cascade' }),
-  status: text('status').$type<'open' | 'bill_requested' | 'closed'>().notNull().default('open'),
+  status: text('status').$type<'open' | 'bill_requested' | 'closed' | 'merged'>().notNull().default('open'),
   payStatus: text('pay_status').$type<'unpaid' | 'claimed' | 'paid'>().notNull().default('unpaid'),
-  payMethod: text('pay_method').$type<'upi_shop' | 'cash'>(),
+  payMethod: text('pay_method').$type<PayMethod>(),
+  payments: jsonb('payments').$type<Payment[]>().notNull().default([]),
+  guests: integer('guests').notNull().default(0),
+  mergedInto: uuid('merged_into'),
+  openedBy: uuid('opened_by'),
   utrLast4: text('utr_last4'),
   billNo: integer('bill_no'),
   totalPaise: integer('total_paise'),
@@ -248,16 +260,28 @@ export const tableSessions = pgTable('table_sessions', {
 
 export type OrderStatus = 'awaiting_payment' | 'confirmed' | 'preparing' | 'ready' | 'out' | 'delivered' | 'cancelled' | 'rejected';
 export type PayStatus = 'unpaid' | 'claimed' | 'paid' | 'on_bill';
-export type PayMethod = 'upi_shop' | 'cash' | 'bill';
+export type PayMethod = 'upi_shop' | 'cash' | 'bill' | 'card' | 'online' | 'split';
+export type Payment = { method: 'upi_shop' | 'cash' | 'card' | 'online'; amountPaise: number };
+export type Channel = 'qr' | 'pos' | 'zomato' | 'swiggy' | 'phone' | 'other';
 export type TimelineEntry = { status: string; at: string; by?: string };
 
 export const orders = pgTable('orders', {
   id: id(),
   venueId: uuid('venue_id').notNull().references(() => venues.id),
   vendorId: uuid('vendor_id').notNull().references(() => vendors.id),
-  customerId: uuid('customer_id').notNull().references(() => customers.id),
-  spotId: uuid('spot_id').notNull().references(() => spots.id),
+  customerId: uuid('customer_id').references(() => customers.id),   // null for a walk-in billed by staff without a phone
+  spotId: uuid('spot_id').references(() => spots.id),               // null for takeaway / delivery billed by staff
   tableSessionId: uuid('table_session_id').references(() => tableSessions.id),
+  channel: text('channel').$type<Channel>().notNull().default('qr'),   // qr = guest ordered by QR; pos = staff billing screen
+  createdBy: uuid('created_by'),                                       // staff who billed it (POS)
+  guestName: text('guest_name').notNull().default(''),
+  guestPhone: text('guest_phone').notNull().default(''),
+  deliveryAddress: text('delivery_address').notNull().default(''),
+  externalRef: text('external_ref'),                                   // Zomato / Swiggy order id
+  payments: jsonb('payments').$type<Payment[]>().notNull().default([]),
+  billDiscountPaise: integer('bill_discount_paise').notNull().default(0),   // staff discount (part of discountPaise)
+  discountReason: text('discount_reason'),
+  roundOffPaise: integer('round_off_paise').notNull().default(0),
   kotNo: integer('kot_no').notNull(),                  // daily number per venue, shown to customer
   businessDate: text('business_date').notNull(),       // YYYY-MM-DD (venue local day)
   status: text('status').$type<OrderStatus>().notNull(),
@@ -266,7 +290,7 @@ export const orders = pgTable('orders', {
   utrLast4: text('utr_last4'),
   paidConfirmedBy: uuid('paid_confirmed_by').references(() => staff.id),
   paidAt: timestamp('paid_at', { withTimezone: true }),
-  fulfilment: text('fulfilment').$type<'seat' | 'table' | 'pickup'>().notNull(),
+  fulfilment: text('fulfilment').$type<'seat' | 'table' | 'pickup' | 'delivery'>().notNull(),
   deliverAt: text('deliver_at').$type<'now' | 'interval'>().notNull().default('now'),
   releaseAt: timestamp('release_at', { withTimezone: true }),   // interval orders reach the kitchen at this time
   showLabel: text('show_label'),
@@ -295,6 +319,10 @@ export const orderItems = pgTable('order_items', {
   pricePaise: integer('price_paise').notNull(),
   qty: integer('qty').notNull(),
   veg: boolean('veg').notNull(),
+  variantId: text('variant_id'),
+  variantName: text('variant_name'),
+  addons: jsonb('addons').$type<{ name: string; pricePaise: number }[]>().notNull().default([]),
+  note: text('note').notNull().default(''),     // "less spicy", printed on the KOT
 }, t => [index('oi_order_idx').on(t.orderId)]);
 
 // One KOT per station per order.
@@ -343,8 +371,10 @@ export const invoices = pgTable('invoices', {
   taxBps: integer('tax_bps').notNull(),
   cgstPaise: integer('cgst_paise').notNull(),
   sgstPaise: integer('sgst_paise').notNull(),
+  roundOffPaise: integer('round_off_paise').notNull().default(0),
   totalPaise: integer('total_paise').notNull(),
   payMethod: text('pay_method').notNull(),
+  payments: jsonb('payments').$type<Payment[]>().notNull().default([]),
   issuedAt: timestamp('issued_at', { withTimezone: true }).notNull().defaultNow(),
   cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
 }, t => [
@@ -433,3 +463,69 @@ export const uploads = pgTable('uploads', {
   size: integer('size').notNull(),
   createdAt: created(),
 });
+
+// ---------------------------------------------------------------- cash drawer (one open shift per venue)
+export const cashShifts = pgTable('cash_shifts', {
+  id: id(),
+  venueId: uuid('venue_id').notNull().references(() => venues.id, { onDelete: 'cascade' }),
+  openedBy: text('opened_by').notNull(),
+  openedAt: timestamp('opened_at', { withTimezone: true }).notNull().defaultNow(),
+  openingPaise: integer('opening_paise').notNull(),
+  closedBy: text('closed_by'),
+  closedAt: timestamp('closed_at', { withTimezone: true }),
+  expectedPaise: integer('expected_paise'),
+  countedPaise: integer('counted_paise'),
+  note: text('note').notNull().default(''),
+}, t => [index('shifts_venue_idx').on(t.venueId, t.openedAt)]);
+
+// Cash put in, taken out, or spent from the drawer (petty expenses: vegetables, gas, tips…).
+export const cashEntries = pgTable('cash_entries', {
+  id: id(),
+  venueId: uuid('venue_id').notNull().references(() => venues.id, { onDelete: 'cascade' }),
+  shiftId: uuid('shift_id').references(() => cashShifts.id, { onDelete: 'set null' }),
+  kind: text('kind').$type<'in' | 'out' | 'expense'>().notNull(),
+  category: text('category').notNull().default(''),
+  amountPaise: integer('amount_paise').notNull(),
+  note: text('note').notNull().default(''),
+  staffName: text('staff_name').notNull().default(''),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [index('cash_entries_venue_idx').on(t.venueId, t.at)]);
+
+// ---------------------------------------------------------------- inventory
+// Raw materials. Quantities are in the material's unit (kg, litre, pcs…).
+export const stockItems = pgTable('stock_items', {
+  id: id(),
+  venueId: uuid('venue_id').notNull().references(() => venues.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  unit: text('unit').notNull(),                       // kg | g | l | ml | pcs | pack
+  qty: doublePrecision('qty').notNull().default(0),   // stock on hand
+  lowLevel: doublePrecision('low_level').notNull().default(0),
+  costPaise: integer('cost_paise').notNull().default(0),   // last purchase cost per unit
+  active: boolean('active').notNull().default(true),
+  createdAt: created(),
+}, t => [index('stock_items_venue_idx').on(t.venueId)]);
+
+// How much of each material one portion uses. variantId null = every size (unless the size has its own lines).
+export const recipes = pgTable('recipes', {
+  id: id(),
+  venueId: uuid('venue_id').notNull().references(() => venues.id, { onDelete: 'cascade' }),
+  itemId: uuid('item_id').notNull().references(() => items.id, { onDelete: 'cascade' }),
+  variantId: text('variant_id'),
+  stockItemId: uuid('stock_item_id').notNull().references(() => stockItems.id, { onDelete: 'cascade' }),
+  qty: doublePrecision('qty').notNull(),
+}, t => [index('recipes_item_idx').on(t.itemId)]);
+
+// Every stock change: purchase (+), sale (−), sale reversed (+), wastage (−), count adjustment (±).
+export const stockMoves = pgTable('stock_moves', {
+  id: bigserial('id', { mode: 'number' }).primaryKey(),
+  venueId: uuid('venue_id').notNull().references(() => venues.id, { onDelete: 'cascade' }),
+  stockItemId: uuid('stock_item_id').notNull().references(() => stockItems.id, { onDelete: 'cascade' }),
+  kind: text('kind').$type<'purchase' | 'sale' | 'return' | 'wastage' | 'adjust'>().notNull(),
+  qty: doublePrecision('qty').notNull(),                 // signed
+  costPaise: integer('cost_paise').notNull().default(0),   // purchases: total paid
+  orderId: uuid('order_id'),
+  supplier: text('supplier').notNull().default(''),
+  note: text('note').notNull().default(''),
+  staffName: text('staff_name').notNull().default(''),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [index('stock_moves_venue_idx').on(t.venueId, t.at), index('stock_moves_order_idx').on(t.orderId)]);

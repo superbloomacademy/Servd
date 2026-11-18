@@ -42,8 +42,12 @@ export default async function TableBillPrint({ params }: { params: Promise<{ id:
         {bill.discountPaise > 0 && <div className="flex justify-between"><span>Discount</span><span>-{r(bill.discountPaise)}</span></div>}
         <div className="flex justify-between"><span>CGST</span><span>{r(half)}</span></div>
         <div className="flex justify-between"><span>SGST</span><span>{r(bill.taxPaise - half)}</span></div>
+        {bill.roundOffPaise !== 0 && <div className="flex justify-between"><span>Round off</span><span>{bill.roundOffPaise > 0 ? '+' : '-'}{r(Math.abs(bill.roundOffPaise))}</span></div>}
         <div className="mt-1 flex justify-between border-t border-black pt-1 text-[15px] font-bold"><span>TOTAL</span><span>₹{r(bill.totalPaise)}</span></div>
-        <p className="mt-1">{bill.session.payStatus === 'paid' ? `Paid by ${bill.session.payMethod === 'cash' ? 'cash' : 'UPI'}` : 'Payment pending'}</p>
+        {bill.duePaise !== bill.totalPaise && <div className="flex justify-between font-bold"><span>Already paid</span><span>-{r(bill.totalPaise - bill.duePaise)}</span></div>}
+        {bill.duePaise !== bill.totalPaise && <div className="flex justify-between text-[15px] font-bold"><span>TO PAY</span><span>₹{r(bill.duePaise)}</span></div>}
+        {bill.session.guests > 0 && <p className="mt-1">Guests: {bill.session.guests} · per guest ₹{r(Math.ceil(bill.duePaise / bill.session.guests))}</p>}
+        <p className="mt-1">{bill.session.payStatus === 'paid' ? `Paid by ${bill.session.payMethod === 'cash' ? 'cash' : bill.session.payMethod === 'split' ? 'split payment' : 'UPI'}` : 'Payment pending'}</p>
         <p className="mt-3 text-center">Thank you! Visit again.</p>
         <p className="text-center text-[10px]">powered by servd</p>
       </div>

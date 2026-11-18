@@ -45,7 +45,7 @@ export function ItemRow({ item, category, qty, onAdd, onInc, onDec, canOrder }: 
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2"><VegMark veg={item.veg} /><TagChip tags={item.tags} /></div>
         <h3 className="mt-1.5 text-[17px] leading-snug font-bold text-ink">{item.name}</h3>
-        <p className="tabular mt-1 text-[15px] font-semibold text-ink">{rupee(item.pricePaise)}</p>
+        <p className="tabular mt-1 text-[15px] font-semibold text-ink">{item.variants?.length ? `from ${rupee(item.pricePaise)}` : rupee(item.pricePaise)}{(item.variants?.length || item.addonGroups?.length) ? <span className="ml-1.5 text-xs font-normal text-muted">customisable</span> : null}</p>
         {item.description && <p className="mt-2 line-clamp-2 text-[13.5px] leading-relaxed text-muted">{item.description}</p>}
       </div>
       <div className="relative shrink-0 pb-4">
@@ -72,7 +72,7 @@ export function MiniCard({ item, category, qty, onAdd, onInc, onDec, canOrder }:
           {canOrder && <AddButton small qty={qty} onAdd={onAdd} onInc={onInc} onDec={onDec} disabled={!item.available} />}
         </div>
       </div>
-      <div className="mt-5 flex items-center gap-1.5"><VegMark veg={item.veg} size={12} /><span className="tabular text-sm font-semibold">{rupee(item.pricePaise)}</span></div>
+      <div className="mt-5 flex items-center gap-1.5"><VegMark veg={item.veg} size={12} /><span className="tabular text-sm font-semibold">{item.variants?.length ? `from ${rupee(item.pricePaise)}` : rupee(item.pricePaise)}</span></div>
       <p className="mt-0.5 line-clamp-2 text-[13.5px] leading-snug font-semibold text-ink-2">{item.name}</p>
     </div>
   );

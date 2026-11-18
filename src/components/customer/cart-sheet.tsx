@@ -5,7 +5,7 @@ import { api, ApiFail, rupee } from '@/lib/client';
 import { Btn, Spinner, VegMark } from '@/components/ui/kit';
 import { useToast } from '@/components/ui/providers';
 import { AddButton, MiniCard } from './item-parts';
-import type { Item, OrderView, Quote, ScanData } from './types';
+import { hasOpts, lineInfo, parseKey, type Item, type OrderView, type Quote, type ScanData } from './types';
 
 export function CartSheet({ open, onClose, data, cart, setQty, catName, onNeedLogin, onPlaced, onRescan }: {
   open: boolean; onClose: () => void; data: ScanData; cart: Record<string, number>; setQty: (id: string, q: number) => void;
@@ -26,14 +26,20 @@ export function CartSheet({ open, onClose, data, cart, setQty, catName, onNeedLo
   const [payMethod, setPayMethod] = useState<'upi_shop' | 'cash'>('upi_shop');
   const [placing, setPlacing] = useState(false);
 
-  const lines = useMemo(() => Object.entries(cart).map(([id, qty]) => ({ item: data.menu.items.find(i => i.id === id), qty })).filter((l): l is { item: Item; qty: number } => !!l.item), [cart, data]);
+  type L = { key: string; item: Item; qty: number; unitPaise: number; extra: string; variantId: string | null; addonIds: string[] };
+  const lines = useMemo(() => Object.entries(cart).map(([key, qty]) => {
+    const item = data.menu.items.find(i => i.id === parseKey(key).itemId);
+    const inf = item && lineInfo(item, key);
+    return item && inf ? { key, item, qty, ...inf } : null;
+  }).filter((l): l is L => !!l), [cart, data]);
+  const apiLines = () => lines.map(l => ({ itemId: l.item.id, qty: l.qty, variantId: l.variantId, addonIds: l.addonIds }));
   const key = JSON.stringify(cart) + coupon;
 
   useEffect(() => {
     if (!open || !lines.length) return;
     const t = setTimeout(async () => {
       try {
-        const q = await api<Quote>('/api/cart/quote', { body: { venueId: venue.id, lines: lines.map(l => ({ itemId: l.item.id, qty: l.qty })), couponCode: coupon } });
+        const q = await api<Quote>('/api/cart/quote', { body: { venueId: venue.id, lines: apiLines(), couponCode: coupon } });
         if (q.coupon && !q.coupon.ok && coupon) { toast(q.coupon.error || 'Coupon removed', 'bad'); setCoupon(null); }
         setQuote(q);
       } catch { /* keep last quote */ }
@@ -47,7 +53,7 @@ export function CartSheet({ open, onClose, data, cart, setQty, catName, onNeedLo
 
   const apply = async (code: string) => {
     setCodeErr('');
-    const q = await api<Quote>('/api/cart/quote', { body: { venueId: venue.id, lines: lines.map(l => ({ itemId: l.item.id, qty: l.qty })), couponCode: code } }).catch(() => null);
+    const q = await api<Quote>('/api/cart/quote', { body: { venueId: venue.id, lines: apiLines(), couponCode: code } }).catch(() => null);
     if (q?.coupon?.ok) { setCoupon(q.coupon.code!); setQuote(q); setCodeInput(''); toast(`${q.coupon.code} applied. You save ${rupee(q.coupon.discount!)}`); }
     else setCodeErr(q?.coupon?.error || 'This code is not valid');
   };
@@ -56,7 +62,7 @@ export function CartSheet({ open, onClose, data, cart, setQty, catName, onNeedLo
     setPlacing(true);
     try {
       const r = await api<{ order: OrderView }>('/api/orders', { body: {
-        visitId: data.visit?.id, lines: lines.map(l => ({ itemId: l.item.id, qty: l.qty })), couponCode: coupon,
+        visitId: data.visit?.id, lines: apiLines(), couponCode: coupon,
         deliverAt: theater ? deliverAt : 'now', note, payMethod: running ? undefined : payMethod,
       } });
       onPlaced(r.order);
@@ -70,12 +76,12 @@ export function CartSheet({ open, onClose, data, cart, setQty, catName, onNeedLo
 
   const inCart = new Set(lines.map(l => l.item.id));
   const byId = (id: string) => data.menu.items.find(i => i.id === id);
-  const meal = (quote?.completeYourMeal || []).map(byId).filter((i): i is Item => !!i && i.available && !inCart.has(i.id));
-  const popular = data.mostOrdered.map(byId).filter((i): i is Item => !!i && i.available && !inCart.has(i.id) && !meal.some(m => m.id === i.id)).slice(0, 6);
+  const meal = (quote?.completeYourMeal || []).map(byId).filter((i): i is Item => !!i && i.available && !hasOpts(i) && !inCart.has(i.id));
+  const popular = data.mostOrdered.map(byId).filter((i): i is Item => !!i && i.available && !hasOpts(i) && !inCart.has(i.id) && !meal.some(m => m.id === i.id)).slice(0, 6);
   const best = quote?.coupons.find(c => c.applicable && c.code !== coupon);
   const nextUnlock = quote?.coupons.filter(c => c.addMorePaise > 0).sort((a, b) => a.addMorePaise - b.addMorePaise)[0];
   const ctl = (it: Item) => ({ qty: cart[it.id] || 0, onAdd: () => setQty(it.id, 1), onInc: () => setQty(it.id, (cart[it.id] || 0) + 1), onDec: () => setQty(it.id, (cart[it.id] || 0) - 1) });
-  const subtotal = lines.reduce((s, l) => s + l.item.pricePaise * l.qty, 0);
+  const subtotal = lines.reduce((s, l) => s + l.unitPaise * l.qty, 0);
   const total = quote?.totalPaise ?? subtotal;
   const intervalIn = win.show?.minutesToInterval ?? 0;
 
@@ -91,11 +97,11 @@ export function CartSheet({ open, onClose, data, cart, setQty, catName, onNeedLo
         {/* Items */}
         <section className="mx-3 mt-3 rounded-2xl bg-white p-4">
           {lines.map(l => (
-            <div key={l.item.id} className="flex items-center gap-3 py-2.5">
+            <div key={l.key} className="flex items-center gap-3 py-2.5">
               <VegMark veg={l.item.veg} />
-              <div className="min-w-0 flex-1"><p className="text-[15px] leading-snug font-semibold">{l.item.name}</p><p className="tabular text-[13px] text-muted">{rupee(l.item.pricePaise)}</p></div>
-              <AddButton small {...ctl(l.item)} />
-              <p className="tabular w-16 text-right text-sm font-semibold">{rupee(l.item.pricePaise * l.qty)}</p>
+              <div className="min-w-0 flex-1"><p className="text-[15px] leading-snug font-semibold">{l.item.name}</p>{l.extra && <p className="text-[13px] text-ink-2">{l.extra}</p>}<p className="tabular text-[13px] text-muted">{rupee(l.unitPaise)}</p></div>
+              <AddButton small qty={l.qty} onAdd={() => setQty(l.key, 1)} onInc={() => setQty(l.key, l.qty + 1)} onDec={() => setQty(l.key, l.qty - 1)} />
+              <p className="tabular w-16 text-right text-sm font-semibold">{rupee(l.unitPaise * l.qty)}</p>
             </div>
           ))}
           <div className="mt-2 flex flex-wrap gap-2 border-t border-dashed border-line pt-3">

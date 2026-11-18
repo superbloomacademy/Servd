@@ -83,7 +83,7 @@ async function main() {
   check('owner phone already in use is refused', dup.json?.code === 'phone_taken', dup.json);
   const ob = await admin.post('/api/admin/vendors', {
     vendorName: `Test Chaat ${rnd(9999)}`, legalName: 'Test Foods LLP', venueName: 'Test Chaat, Ameerpet', type: 'stall', serviceMode: 'shop_qr',
-    city: 'Hyderabad', taxBps: 500, ownerName: 'Ravi Owner', ownerPhone, ownerPin: '4821', commissionBps: 200, monthlyFeePaise: 49900, trialDays: 0,
+    city: 'Hyderabad', taxBps: 500, ownerName: 'Ravi Owner', ownerPhone, ownerPin: '4821', commissionBps: 200, monthlyFeePaise: 49900, trialDays: 0, openTime: '00:00', closeTime: '00:00', // open 24 h so the test works at any hour
     leadId: lead.json.lead.id,
   });
   check('vendor onboarded', ob.json?.vendor?.id && ob.json.venue?.id, ob.json);

@@ -31,14 +31,18 @@ export default async function KotPage({ params, searchParams }: { params: Promis
             <div className="flex justify-between"><b>KOT #{o.kotNo}</b><span>{t(o.paidAt || o.createdAt)}</span></div>
             <p className="my-1 text-center font-sans text-2xl font-extrabold">{o.spotLabel}</p>
             {o.showLabel && <p className="text-center">{o.showLabel}</p>}
-            <p className="text-center"><span className="inline-block border-2 border-black px-2 font-bold">{o.deliverAt === 'interval' ? 'AT INTERVAL' : o.fulfilment === 'pickup' ? 'COUNTER PICKUP' : o.fulfilment === 'table' ? 'SERVE AT TABLE' : 'DELIVER TO SEAT'}</span></p>
+            <p className="text-center"><span className="inline-block border-2 border-black px-2 font-bold">{o.deliverAt === 'interval' ? 'AT INTERVAL' : o.fulfilment === 'delivery' ? 'DELIVERY · PACK' : o.fulfilment === 'pickup' ? (o.channel === 'qr' ? 'COUNTER PICKUP' : 'TAKEAWAY · PACK') : o.fulfilment === 'table' ? 'SERVE AT TABLE' : 'DELIVER TO SEAT'}</span></p>
+            {(o.guestName || o.guestPhone) && <p className="text-center">{o.guestName}{o.guestPhone ? ` · ${o.guestPhone}` : ''}</p>}
             <hr className="my-1.5 border-dashed border-black" />
             <table className="w-full text-[15px]"><tbody>
-              {o.items.filter(i => i.stationId === k.stationId).map(i => <tr key={i.id}><td className="w-9 align-top font-bold">{i.qty} x</td><td>{i.name}{i.veg ? '' : ' (NV)'}</td></tr>)}
+              {o.items.filter(i => i.stationId === k.stationId).map(i => <tr key={i.id}><td className="w-9 align-top font-bold">{i.qty} x</td><td>{i.name}{i.veg ? '' : ' (NV)'}
+                {i.addons.length > 0 && <div className="text-[13px]">+ {i.addons.map(a => a.name).join(', ')}</div>}
+                {i.note && <div className="font-bold">** {i.note.toUpperCase()} **</div>}</td></tr>)}
             </tbody></table>
             <hr className="my-1.5 border-dashed border-black" />
             {o.note && <p><b>NOTE:</b> {o.note}</p>}
-            <p>{o.payStatus === 'paid' ? `PAID · ${o.payMethod === 'cash' ? 'CASH' : 'UPI'}` : o.payStatus === 'on_bill' ? 'ON TABLE BILL' : 'PAYMENT PENDING'}</p>
+            {o.deliveryAddress && <p><b>ADDRESS:</b> {o.deliveryAddress}</p>}
+            <p>{o.payStatus === 'paid' ? `PAID · ${(o.payMethod || 'upi').replace('upi_shop', 'upi').toUpperCase()}` : o.payStatus === 'on_bill' ? 'ON TABLE BILL' : 'PAYMENT PENDING'}</p>
           </section>
         ))}
       </div>

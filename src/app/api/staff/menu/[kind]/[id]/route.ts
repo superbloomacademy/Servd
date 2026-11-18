@@ -5,6 +5,7 @@ import { requireVenueAccess } from '@/lib/auth';
 import { CAN } from '@/lib/roles';
 import { audit } from '@/lib/audit';
 import { emit } from '@/lib/realtime';
+import { cleanOptions } from '@/lib/menu';
 
 const TABLES = { item: schema.items, category: schema.categories, station: schema.stations } as const;
 type Kind = keyof typeof TABLES;
@@ -38,6 +39,12 @@ export const PATCH = route<{ kind: string; id: string }>(async (req, { kind, id 
     if ('categoryId' in b) set.categoryId = String(b.categoryId);
     if ('stationId' in b) set.stationId = b.stationId ? String(b.stationId) : null;
     if ('sort' in b) set.sort = Number(b.sort) || 0;
+    if (kind === 'item' && ('variants' in b || 'addonGroups' in b)) {
+      let o;
+      try { o = cleanOptions('variants' in b ? b.variants : row.variants, 'addonGroups' in b ? b.addonGroups : row.addonGroups); } catch (e) { throw bad((e as Error).message); }
+      set.variants = o.variants; set.addonGroups = o.addonGroups;
+      if (o.minPrice) set.pricePaise = o.minPrice;
+    }
   }
   if (!Object.keys(set).length) throw bad('Nothing to change');
   const [after] = await db().update(t).set(set).where(eq(t.id, id)).returning();

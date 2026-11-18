@@ -3,6 +3,7 @@
 import { and, eq, inArray, isNotNull, lt, lte } from 'drizzle-orm';
 import { db, schema } from '@/db';
 import { broadcastOrder, releaseKots } from './orders';
+import { returnStock } from './stock';
 
 export async function runJobs() {
   // 1. Auto-cancel pay-first orders that were never paid (not even claimed) in time.
@@ -15,6 +16,7 @@ export async function runJobs() {
         status: 'cancelled', rejectReason: `Not paid within ${v.settings.unpaidCancelMin} minutes`,
         timeline: [...o.timeline, { status: 'cancelled', at: new Date().toISOString(), by: 'system' }],
       }).where(eq(schema.orders.id, o.id));
+      await returnStock(o.id, 'system');
       await broadcastOrder(o.id);
     }
   }

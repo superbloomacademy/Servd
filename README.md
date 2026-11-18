@@ -1,4 +1,4 @@
-# Servd platform (Phase 1 + Phase 2)
+# Servd platform (Phase 1 + Phase 2 + POS)
 
 QR ordering for **theaters, restaurants, cafés and food stalls**: one platform, each vendor with their own brand.
 The working name "Servd" is not final.
@@ -23,6 +23,7 @@ Stop with **Ctrl+C**.
 | `npm run test:e2e` | Full end-to-end test, 146 checks: every route, live updates, security. Needs testing mode: start the app with `EMAIL_PROVIDER=off npm start` (after `npm run build`) |
 | `npm run db:migrate` | Update database tables (Vercel runs this automatically on every deploy) |
 | `npm run test:login` | Customer email-OTP login test, 18 checks |
+| `npm run test:pos` | Billing (POS) test, 85 checks: billing screen, sizes/add-ons, tables, split payment, discounts, cancellations, cash drawer, inventory, reports. Uses the demo restaurant; same testing mode as above |
 
 **On your phone:** connect it to the same Wi-Fi and open the address printed at start-up (e.g. `http://192.168.1.7:3001`).
 QR codes point to that address. Before printing real stickers, set `PUBLIC_BASE_URL` in `.env` to your real web address.
@@ -95,6 +96,20 @@ The home page has a link that opens each demo venue exactly as a QR scan would.
 - **Automatic KOT printing** per kitchen screen
 - **Ready for Vercel**: live mode without demo data, public landing page, live updates without websockets, photos in the database, database setup on every deploy, health check. See `docs/DEPLOY.md`.
 
+## What the POS adds (17 Nov 2026, see `docs/POS_PLAN.md`)
+
+Everything a restaurant expects from billing software like Petpooja, next to the guest QR ordering:
+- **Billing** tab: dine-in (table), takeaway, delivery, and Zomato / Swiggy orders typed in with their order ID. Categories, search (press `/`), notes for the kitchen, guest name and phone, discount with a reason. **Send KOT**, or **KOT & pay**.
+- **Payment**: cash (shows the change to return), UPI, card, paid online, or **split** across several (with an equal-share helper). Unpaid takeaways are settled from Orders & payments.
+- **Tables**: tap a free table to order; tap a running table to add items, set guests, give a discount, **move**, **merge**, **cancel an item** (reason required), print the bill and settle.
+- **Sizes and add-ons** (Half / Full, Extra cheese): in the menu editor, billing screen, guest menu, KOT and bill.
+- **Day-end reports**: sales, GST, payment modes, order sources, items, categories, discounts, cancellations, staff, guests. **Print the Z report** or download CSV.
+- **Cash drawer**: open with the cash in the drawer, record cash in / out / expenses, close by counting the notes; shortage or extra is recorded.
+- **Inventory**: materials, recipes per dish (and per size), stock goes down with every order and comes back on cancellation; purchases, wastage, counts, low-stock warning, days left, food cost %.
+- **Customers** list (visits, spend, favourite, CSV) and **menu upload from Excel** (CSV, with a template).
+- **Round-off** to the rupee (Settings). Commission applies only to orders guests place by QR.
+- Roles: captains can order and take payment; discounts and item cancellations are for owner / manager / cashier; Inventory and Customers for owner / manager.
+
 ## Automatic KOT printing
 
 Kitchen screen → turn on **Auto-print**. Every new ticket for that screen prints once on that device.
@@ -111,7 +126,8 @@ Turn Auto-print on for **one device per station only**, or tickets print twice.
 - SMS OTP (later; for now the OTP goes by email)
 - Bluetooth / network printers without a PC (for now: a PC or tablet with the browser, see "Automatic KOT printing" above)
 - Payment gateway with split settlement (Phase 2b)
-- Item add-ons and sizes, split bills, token display screen (Phase 3)
+- Separate GST bills per person when splitting by item, loyalty points, Tally format, token display screen
+- Works-offline mode and automatic Zomato / Swiggy import (needs a partner such as UrbanPiper)
 
 Details are in `docs/PLATFORM_PLAN.md`.
 

@@ -21,7 +21,7 @@ export type VendorDue = {
 
 /**
  * What every vendor owes for a month:
- * - commission % on paid orders (orders paid during a free trial are not charged)
+ * - commission % on paid QR orders (orders paid during a free trial, and orders billed by staff, are not charged)
  * - the monthly fee, if the vendor was live and out of trial before the month ended.
  */
 export async function monthlyDues(month: string): Promise<Map<string, VendorDue>> {
@@ -32,7 +32,8 @@ export async function monthlyDues(month: string): Promise<Map<string, VendorDue>
     orders: sql<number>`count(*)::int`,
     sales: sql<number>`coalesce(sum(${schema.orders.totalPaise}),0)::int`,
     cash: sql<number>`coalesce(sum(${schema.orders.totalPaise}) filter (where ${schema.orders.payMethod} = 'cash'),0)::int`,
-    chargeable: sql<number>`coalesce(sum(${schema.orders.totalPaise}) filter (where ${schema.vendors.trialEndsAt} is null or ${schema.orders.paidAt} >= ${schema.vendors.trialEndsAt}),0)::int`,
+    // Commission only on orders guests placed themselves by QR; orders typed in by staff are covered by the monthly fee.
+    chargeable: sql<number>`coalesce(sum(${schema.orders.totalPaise}) filter (where ${schema.orders.channel} = 'qr' and (${schema.vendors.trialEndsAt} is null or ${schema.orders.paidAt} >= ${schema.vendors.trialEndsAt})),0)::int`,
   }).from(schema.orders)
     .innerJoin(schema.vendors, eq(schema.orders.vendorId, schema.vendors.id))
     .where(and(isSale(), gte(schema.orders.paidAt, start), lt(schema.orders.paidAt, end)))

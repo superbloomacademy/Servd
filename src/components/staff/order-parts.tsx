@@ -1,9 +1,9 @@
 'use client';
-import { Banknote, Clock, Printer, Smartphone, StickyNote, Clapperboard, ReceiptText } from 'lucide-react';
+import { Banknote, Clock, Printer, Smartphone, StickyNote, Clapperboard, ReceiptText, CreditCard, Globe, Bike, ShoppingBag } from 'lucide-react';
 import { api, clock, minsSince, rupee } from '@/lib/client';
 import { Btn, Pill, VegMark } from '@/components/ui/kit';
 import { useConfirm, useToast } from '@/components/ui/providers';
-import type { Kot, Order } from './types';
+import { CHANNEL_LABEL, PAY_LABEL, type Kot, type Order } from './types';
 
 // Every action that changes an order or money asks for confirmation first.
 export function useOrderActions(onDone?: () => void) {
@@ -46,7 +46,11 @@ export function useOrderActions(onDone?: () => void) {
 export function PayChip({ o }: { o: Order }) {
   if (['cancelled', 'rejected'].includes(o.status) && o.payStatus !== 'paid') return null;
   if (o.payStatus === 'on_bill') return <Pill tone="info"><ReceiptText size={12} />On table bill</Pill>;
-  if (o.payStatus === 'paid') return <Pill tone="good">{o.payMethod === 'cash' ? <Banknote size={12} /> : <Smartphone size={12} />}Paid · {o.payMethod === 'cash' ? 'Cash' : 'UPI'}</Pill>;
+  if (o.payStatus === 'paid') {
+    const I = o.payMethod === 'cash' ? Banknote : o.payMethod === 'card' ? CreditCard : o.payMethod === 'online' ? Globe : Smartphone;
+    return <Pill tone="good"><I size={12} />Paid · {o.payMethod === 'split' ? o.payments.map(p => PAY_LABEL[p.method]).join(' + ') : PAY_LABEL[o.payMethod || 'upi_shop']}</Pill>;
+  }
+  if (o.channel !== 'qr' && o.payStatus === 'unpaid') return <Pill tone="warn"><Banknote size={12} />To pay {rupee(o.totalPaise)}</Pill>;
   if (o.payMethod === 'cash') return <Pill tone="warn"><Banknote size={12} />Cash due {rupee(o.totalPaise)}</Pill>;
   if (o.payStatus === 'claimed') return <Pill tone="warn" className="anim-pop"><Smartphone size={12} />Says paid{o.utrLast4 ? ` · ref ${o.utrLast4}` : ''}</Pill>;
   return <Pill tone="neutral"><Smartphone size={12} />UPI not paid yet</Pill>;
@@ -72,12 +76,19 @@ export function OrderCard({ o, flash, children, stationId }: { o: Order; flash?:
       <div className="mt-2 flex flex-wrap gap-1.5">
         <PayChip o={o} />
         {o.deliverAt === 'interval' && <Pill tone="brand"><Clapperboard size={12} />Interval{o.releaseAt ? ` · kitchen ${clock(o.releaseAt)}` : ''}</Pill>}
-        {o.fulfilment === 'pickup' && <Pill>Counter pickup</Pill>}
+        {o.fulfilment === 'pickup' && <Pill><ShoppingBag size={12} />{o.channel === 'qr' ? 'Counter pickup' : 'Takeaway'}</Pill>}
+        {o.fulfilment === 'delivery' && <Pill tone="info"><Bike size={12} />Delivery</Pill>}
+        {o.channel !== 'qr' && o.channel !== 'pos' && <Pill tone="brand">{CHANNEL_LABEL[o.channel]}{o.externalRef ? ` #${o.externalRef}` : ''}</Pill>}
+        {(o.guestName || o.guestPhone) && <Pill>{[o.guestName, o.guestPhone].filter(Boolean).join(' · ')}</Pill>}
         {o.couponCode && <Pill>{o.couponCode}</Pill>}
       </div>
       <ul className="mt-2.5 space-y-1 text-[14px]">
-        {items.map(i => <li key={i.id} className="flex items-center gap-2"><VegMark veg={i.veg} size={11} /><b className="tabular w-6">{i.qty}×</b><span>{i.name}</span></li>)}
+        {items.map(i => (
+          <li key={i.id} className="flex items-start gap-2"><span className="mt-1"><VegMark veg={i.veg} size={11} /></span><b className="tabular w-6">{i.qty}×</b>
+            <span>{i.name}{i.addons?.length > 0 && <span className="text-muted"> + {i.addons.map(a => a.name).join(', ')}</span>}{i.note && <span className="block text-xs font-semibold text-[#7A4A00]">“{i.note}”</span>}</span></li>
+        ))}
       </ul>
+      {o.deliveryAddress && <p className="mt-2 text-[13px] text-ink-2"><b>Deliver to:</b> {o.deliveryAddress}</p>}
       {o.note && <p className="mt-2 flex gap-1.5 rounded-lg bg-[#FFF8EC] px-2.5 py-1.5 text-[13px] text-[#7A4A00]"><StickyNote size={14} className="mt-0.5 shrink-0" />{o.note}</p>}
       {o.kots.length > 1 && !stationId && (
         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -93,13 +104,15 @@ export function OrderCard({ o, flash, children, stationId }: { o: Order; flash?:
   );
 }
 
-export function OrderButtons({ o, actions, can }: { o: Order; actions: ReturnType<typeof useOrderActions>; can: (a: 'pay' | 'cook' | 'deliver' | 'reject') => boolean }) {
+export function OrderButtons({ o, actions, can, onSettle }: { o: Order; actions: ReturnType<typeof useOrderActions>; can: (a: 'pay' | 'cook' | 'deliver' | 'reject') => boolean; onSettle?: (o: Order) => void }) {
+  const unpaidPos = o.payStatus === 'unpaid' && o.status !== 'awaiting_payment' && !['cancelled', 'rejected'].includes(o.status);
   return (
     <>
+      {unpaidPos && can('pay') && onSettle && <Btn size="sm" tone="good" onClick={() => onSettle(o)}>Settle {rupee(o.totalPaise)}</Btn>}
       {o.status === 'awaiting_payment' && can('pay') && <Btn size="sm" tone="good" onClick={() => actions.confirmPayment(o)}>{o.payMethod === 'cash' ? 'Cash received' : 'Payment received'}</Btn>}
       {['confirmed', 'preparing'].includes(o.status) && can('cook') && <Btn size="sm" tone="dark" onClick={() => actions.advance(o, 'ready')}>Mark ready</Btn>}
       {o.status === 'ready' && o.fulfilment === 'seat' && can('deliver') && <Btn size="sm" tone="dark" onClick={() => actions.advance(o, 'out')}>Out for delivery</Btn>}
-      {((o.status === 'ready' && o.fulfilment !== 'seat') || o.status === 'out') && can('deliver') && <Btn size="sm" tone="good" onClick={() => actions.advance(o, 'delivered')}>{o.fulfilment === 'pickup' ? 'Handed over' : 'Delivered'}</Btn>}
+      {((o.status === 'ready' && o.fulfilment !== 'seat') || o.status === 'out') && !unpaidPos && can('deliver') && <Btn size="sm" tone="good" onClick={() => actions.advance(o, 'delivered')}>{o.fulfilment === 'pickup' ? 'Handed over' : 'Delivered'}</Btn>}
       {!['delivered', 'cancelled', 'rejected'].includes(o.status) && can('reject') && <Btn size="sm" tone="danger" onClick={() => actions.reject(o)}>Reject</Btn>}
     </>
   );
