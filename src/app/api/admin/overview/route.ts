@@ -74,6 +74,10 @@ export const GET = route(async req => {
     return all >= 20 && qr / all < 0.25 ? [{ venueId: v.id, share: Math.round((qr / all) * 100), orders: all }] : [];
   });
 
+  // Login-code emails that failed in the last 24 h (Gmail blocked, wrong password…): guests can't log in.
+  const mailFails = await d.select({ at: schema.auditLog.at, after: schema.auditLog.after }).from(schema.auditLog)
+    .where(and(eq(schema.auditLog.action, 'email_failed'), gte(schema.auditLog.at, new Date(Date.now() - 24 * 3600e3)))).orderBy(sql`${schema.auditLog.at} desc`);
+
   const venueName = (id: string) => { const v = venues.find(x => x.id === id); const vd = vendors.find(x => x.id === v?.vendorId); return { venue: v?.name ?? '', vendor: vd?.name ?? '', vendorId: vd?.id ?? '' }; };
   return {
     kpi: {
@@ -92,6 +96,7 @@ export const GET = route(async req => {
       trialsEnding: trialsEnding.map(v => ({ id: v.id, name: v.name, trialEndsAt: v.trialEndsAt })),
       suspended: vendors.filter(v => v.status === 'suspended').map(v => ({ id: v.id, name: v.name })),
       lowQr: lowQr.map(l => ({ ...l, ...venueName(l.venueId) })),
+      email: mailFails.length ? { count: mailFails.length, lastAt: mailFails[0].at, reason: (mailFails[0].after as { reason?: string })?.reason ?? 'The mail server refused the email.' } : null,
     },
   };
 });

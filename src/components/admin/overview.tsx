@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { AlertCircle, CalendarClock, ChevronRight, Hourglass, MessageCircleWarning, MoonStar, QrCode, Wrench } from 'lucide-react';
+import { AlertCircle, CalendarClock, ChevronRight, Hourglass, MailWarning, MessageCircleWarning, MoonStar, QrCode, Wrench } from 'lucide-react';
 import { api, rupee, rupeeShort, store, timeAgo } from '@/lib/client';
 import { Spinner, Toggle } from '@/components/ui/kit';
 import { Bars } from '@/components/staff/dashboard';
@@ -25,6 +25,7 @@ type Data = {
     trialsEnding: { id: string; name: string; trialEndsAt: string }[];
     suspended: { id: string; name: string }[];
     lowQr: { venueId: string; venue: string; vendor: string; vendorId: string; share: number; orders: number }[];
+    email: { count: number; lastAt: string; reason: string } | null;
   };
 };
 
@@ -34,7 +35,7 @@ export function Overview({ nav }: { nav: Nav }) {
   useEffect(() => { api<Data>(`/api/admin/overview${withDemo ? '?demo=1' : ''}`).then(setD); }, [withDemo]);
   if (!d) return <div className="grid place-items-center py-24"><Spinner className="text-muted" /></div>;
   const { kpi, attention: a } = d;
-  const items = a.followUps.length + a.setup.length + a.quiet.length + a.tickets.length + a.trialsEnding.length + a.lowQr.length + (kpi.unpaidEarlier.n ? 1 : 0);
+  const items = a.followUps.length + a.setup.length + a.quiet.length + a.tickets.length + a.trialsEnding.length + a.lowQr.length + (a.email ? 1 : 0) + (kpi.unpaidEarlier.n ? 1 : 0);
   const stageLabel = (s: string) => LEAD_STAGES.find(x => x[0] === s)?.[1] ?? s;
 
   return (
@@ -85,6 +86,10 @@ export function Overview({ nav }: { nav: Nav }) {
         <Card title={<>Needs your attention {items > 0 && <span className="ml-1 rounded-full bg-bad px-2 py-0.5 text-xs text-white">{items}</span>}</>}>
           {items === 0 && <p className="py-6 text-center text-sm text-muted">Nothing needs you right now.</p>}
           <ul className="space-y-1">
+            {a.email && (
+              <Row icon={<MailWarning size={17} />} tone="bad" onClick={() => nav.go('activity')}
+                title={`Login codes are not reaching customers (${a.email.count} failed in 24 h)`} sub={`Last ${timeAgo(a.email.lastAt)}. ${a.email.reason}`} />
+            )}
             {a.followUps.map(l => (
               <Row key={l.id} icon={<CalendarClock size={17} />} tone="info" onClick={() => nav.go('leads')}
                 title={`Follow up: ${l.business}`} sub={`${stageLabel(l.stage)} · ${l.nextFollowUp < todayISO() ? 'overdue since ' : 'due '}${day(l.nextFollowUp)}${l.phone ? ` · ${l.phone}` : ''}`} />

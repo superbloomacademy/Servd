@@ -8,6 +8,22 @@
 //
 // EMAIL_FROM_NAME is the name people see, e.g. "Servd".
 import nodemailer from 'nodemailer';
+import { db, schema } from '@/db';
+
+/** Plain-language reason for a mail-server refusal (shown to the super admin). */
+export function emailFailureReason(msg: string) {
+  if (/534|WebLoginRequired|5.7.9/.test(msg)) return 'Google blocked the sign-in. Log in to the Gmail account in a browser, clear any security check, then make a new App Password.';
+  if (/535|Username and Password not accepted|BadCredentials/.test(msg)) return 'Gmail rejected the App Password. Make a new App Password and update EMAIL_PASSWORD.';
+  if (/550|554|quota|limit/i.test(msg)) return 'Gmail stopped sending (daily limit or spam check). Wait a few hours, or check the Gmail account.';
+  if (/ETIMEDOUT|ECONNECTION|ESOCKET|timeout/i.test(msg)) return 'Could not reach the mail server (network). It usually recovers by itself.';
+  return 'The mail server refused the email.';
+}
+
+// Every failure is written to the activity log, so the super admin sees it on the Overview instead of guests silently getting nothing.
+async function recordFailure(provider: string, msg: string) {
+  try { await db().insert(schema.auditLog).values({ action: 'email_failed', entity: 'email', staffName: 'system', after: { provider, error: msg.slice(0, 300), reason: emailFailureReason(msg) } }); }
+  catch { /* never let logging break sending */ }
+}
 
 type Cfg =
   | { provider: 'brevo' | 'resend'; key: string; from: string; fromName: string }
@@ -67,7 +83,7 @@ export async function sendEmail(m: Mail) {
   if (!c) { console.log(`[email · testing mode] to ${m.to}: ${m.subject}`); return; }
   if (c.provider === 'smtp') {
     try { await transport(c).sendMail({ from: { name: c.fromName, address: c.from }, to: m.to, subject: m.subject, html: m.html, text: m.text }); }
-    catch (e) { console.error('[email] mail server refused the email:', (e as Error).message); g.__servdMail = undefined; throw new Error('email_failed'); }
+    catch (e) { console.error('[email] mail server refused the email:', (e as Error).message); g.__servdMail = undefined; await recordFailure('gmail/smtp', (e as Error).message); throw new Error('email_failed'); }
     return;
   }
   const res = c.provider === 'brevo'
@@ -82,7 +98,9 @@ export async function sendEmail(m: Mail) {
         body: JSON.stringify({ from: `${c.fromName} <${c.from}>`, to: [m.to], subject: m.subject, html: m.html, text: m.text }),
       });
   if (!res.ok) {
-    console.error(`[email] ${c.provider} refused the email (${res.status}):`, (await res.text()).slice(0, 300));
+    const body = (await res.text()).slice(0, 300);
+    console.error(`[email] ${c.provider} refused the email (${res.status}):`, body);
+    await recordFailure(c.provider, `${res.status} ${body}`);
     throw new Error('email_failed');
   }
 }
