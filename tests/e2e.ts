@@ -174,11 +174,16 @@ async function main() {
   await customerLogin(t, phone(), `e2e${rnd(1e6)}@example.net`);
   // pick a free table
   let tv: any = null;
-  for (const s of srSpots) { const r = await t.post('/api/scan', { code: s.code }); if (r.json?.window?.open && r.json.visit) { tv = r.json; break; } }
+  const taken = new Set((await sr.get(`/api/staff/v/${srVenue}/live`)).json.tables.map((x: any) => x.session.spotId));
+  for (const s of srSpots.filter((x: any) => !taken.has(x.id))) { const r = await t.post('/api/scan', { code: s.code }); if (r.json?.window?.open && r.json.visit) { tv = r.json; break; } }
   check('table QR opens a running bill', !!tv?.tableSessionId, tv?.window);
   if (tv) {
-    await t.post('/api/orders', { visitId: tv.visit.id, lines: [{ itemId: srMenu[0].id, qty: 1 }] });
-    await t.post('/api/orders', { visitId: tv.visit.id, lines: [{ itemId: srMenu[1].id, qty: 2 }] });
+    const r1 = await t.post('/api/orders', { visitId: tv.visit.id, lines: [{ itemId: srMenu[0].id, qty: 1 }] });
+    check('a table’s first QR order waits for the staff', r1.json?.order?.awaitingStaff === true, r1.json);
+    check('an unaccepted bill cannot be closed', (await sr.post(`/api/staff/tables/${tv.tableSessionId}`, { method: 'cash' })).status === 400);
+    check('staff accept the table', (await sr.post(`/api/staff/orders/${r1.json?.order?.id}`, { action: 'accept' })).status === 200);
+    const r2 = await t.post('/api/orders', { visitId: tv.visit.id, lines: [{ itemId: srMenu[1].id, qty: 2 }] });
+    check('its second order goes straight through', r2.json?.order?.awaitingStaff === false, r2.json);
     const close = await sr.post(`/api/staff/tables/${tv.tableSessionId}`, { method: 'cash' });
     check('table closed', close.status === 200, close.json);
     const tb = await t.get(`/print/invoice/${tv.tableSessionId}`);
@@ -293,7 +298,8 @@ async function main() {
 
   section('Restaurant table: waiter call, customer asks for the bill and pays by UPI');
   let tv2: any = null;
-  for (const s of srSpots) { const r = await t.post('/api/scan', { code: s.code }); if (r.json?.window?.open && r.json.visit && r.json.tableSessionId) { tv2 = r.json; break; } }
+  const taken2 = new Set((await sr.get(`/api/staff/v/${srVenue}/live`)).json.tables.map((x: any) => x.session.spotId));
+  for (const s of srSpots.filter((x: any) => !taken2.has(x.id))) { const r = await t.post('/api/scan', { code: s.code }); if (r.json?.window?.open && r.json.visit && r.json.tableSessionId) { tv2 = r.json; break; } }
   check('a table is free for the next guest', !!tv2);
   if (tv2) {
     const firstQr = await t.post('/api/orders', { visitId: tv2.visit.id, lines: [{ itemId: srMenu[0].id, qty: 1 }] });
