@@ -122,3 +122,12 @@ export async function shrinkImage(file: File, maxSide = 1200): Promise<File> {
     return new File([blob], file.name.replace(/\.\w+$/, type === 'image/png' ? '.png' : '.jpg'), { type });
   } catch { return file; }
 }
+
+/** Print a page without leaving the screen. */
+export function printQuietly(url: string) {
+  const f = document.createElement('iframe');
+  f.style.cssText = 'position:fixed;width:0;height:0;border:0;right:0;bottom:0';
+  f.src = url;
+  document.body.appendChild(f);
+  setTimeout(() => f.remove(), 60000);
+}

@@ -45,7 +45,7 @@ export async function inventoryOverview(venueId: string) {
   for (const p of purchases) if (p.status === 'ordered' || p.status === 'part') for (const l of p.lines) coming.set(l.stockItemId, (coming.get(l.stockItemId) || 0) + Math.max(0, l.qty - l.received) * l.factor);
   // Oldest stock is used first, so what is left belongs to the newest deliveries.
   const expiring: { stockItemId: string; name: string; unit: string; qty: number; expiry: string; daysLeft: number }[] = [];
-  for (const i of items) {
+  for (const i of items.filter(x => x.active)) {
     let left = Math.max(0, i.qty);
     for (const b of batches.filter(x => x.stockItemId === i.id)) {
       if (left <= 1e-9) break;

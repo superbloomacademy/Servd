@@ -16,12 +16,13 @@ type Area = { id: string; name: string };
 export function useTables(venueId: string) {
   const [spots, setSpots] = useState<Spot[]>([]);
   const [areas, setAreas] = useState<Area[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const load = useCallback(async () => {
     const r = await api<{ areas: Area[]; spots: Spot[] }>(`/api/staff/v/${venueId}/spots`);
-    setAreas(r.areas); setSpots(r.spots.filter(s => s.kind === 'table' && s.active));
+    setAreas(r.areas); setSpots(r.spots.filter(s => s.kind === 'table' && s.active)); setLoaded(true);
   }, [venueId]);
   useEffect(() => { load(); }, [load]);
-  return { spots, areas };
+  return { spots, areas, loaded };
 }
 
 // Floor view: every table with its state. Free table → start an order. Running table → its bill.
@@ -71,8 +72,8 @@ export function Tables({ venue, live, role, reload, onOrder }: { venue: VenueCtx
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
             {g.list.map(s => {
               const b = billFor(s.id), reqs = reqFor(s.id);
-              const state = !b ? 'free' : b.rounds.some(r => r.awaitingStaff) ? 'accept' : b.session.status === 'bill_requested' ? (b.session.payStatus === 'claimed' ? 'paid?' : 'bill') : b.rounds.length ? 'eating' : 'seated';
-              const style = { free: 'border-line bg-white', seated: 'border-[#BFD3F7] bg-[#F3F7FF]', accept: 'border-bad bg-[#FDECEE]', eating: 'border-[#F5D7A9] bg-[#FFF8EC]', bill: 'border-brand bg-brand-soft', 'paid?': 'border-good bg-[#E7F6EF]' }[state];
+              const state = tableState(b);
+              const style = TABLE_STYLE[state];
               const mins = b ? minsSince(b.session.openedAt) : 0;
               return (
                 <button key={s.id} onClick={() => (b ? setOpen(b.session.id) : onOrder(s.id))}
@@ -103,8 +104,12 @@ export function Tables({ venue, live, role, reload, onOrder }: { venue: VenueCtx
   );
 }
 
+export const TABLE_STYLE = { free: 'border-line bg-white', seated: 'border-[#BFD3F7] bg-[#F3F7FF]', accept: 'border-bad bg-[#FDECEE]', eating: 'border-[#F5D7A9] bg-[#FFF8EC]', bill: 'border-brand bg-brand-soft', 'paid?': 'border-good bg-[#E7F6EF]' };
+export function tableState(b: TableBill | undefined): keyof typeof TABLE_STYLE {
+  return !b ? 'free' : b.rounds.some(r => r.awaitingStaff) ? 'accept' : b.session.status === 'bill_requested' ? (b.session.payStatus === 'claimed' ? 'paid?' : 'bill') : b.rounds.length ? 'eating' : 'seated';
+}
 /** 45 → "45 min", 742 → "12 h 22 min". */
-const dur = (m: number) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`);
+export const dur = (m: number) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`);
 
 function Legend({ cls, label }: { cls: string; label: string }) {
   return <span className="flex items-center gap-1.5"><span className={`h-3.5 w-3.5 rounded border-2 ${cls}`} />{label}</span>;
@@ -207,7 +212,7 @@ export function TableBillSheet({ bill, live, spots, role, onClose, reload, onAdd
         </div>
       </Sheet>
 
-      <PaySheet open={pay} onClose={() => setPay(false)} title={`Settle ${bill.spotLabel}`} amountPaise={bill.duePaise} guests={bill.session.guests}
+      <PaySheet venueId={live.venueId} open={pay} onClose={() => setPay(false)} title={`Settle ${bill.spotLabel}`} amountPaise={bill.duePaise} guests={bill.session.guests}
         onPay={async p => { if (await act({ action: 'close', payments: p }, `${bill.spotLabel} settled and free`)) { setPay(false); onClose(); } }} />
       <DiscountSheet open={disc} onClose={() => setDisc(false)} subtotalPaise={unpaidRounds.reduce((a, r) => a + r.items.reduce((x, i) => x + i.qty * i.pricePaise, 0), 0)}
         current={null} onApply={d => act({ action: 'discount', discount: d ?? { kind: 'flat', value: 0, reason: 'removed' } }, d ? 'Discount applied' : 'Discount removed')} />

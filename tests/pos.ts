@@ -92,7 +92,7 @@ async function main() {
   const kotPrint = await captain.get(`/print/kot/${o1.id}`);
   check('printed KOT shows the kitchen note', kotPrint.text.includes('LESS SPICY'));
   const after1 = await stock();
-  check('stock: paneer down 0.4 kg, chicken down 0.15 kg', Math.abs(qtyOf(before, 'Paneer') - qtyOf(after1, 'Paneer') - 0.4) < 1e-6 && Math.abs(qtyOf(before, 'Chicken') - qtyOf(after1, 'Chicken') - 0.15) < 1e-6,
+  check('stock: paneer down 0.4 kg; chicken 0.15 kg cleaned = 0.1667 kg bought (90% usable)', Math.abs(qtyOf(before, 'Paneer') - qtyOf(after1, 'Paneer') - 0.4) < 1e-6 && Math.abs(qtyOf(before, 'Chicken') - qtyOf(after1, 'Chicken') - 0.15 / 0.9) < 2e-3,
     { paneer: [qtyOf(before, 'Paneer'), qtyOf(after1, 'Paneer')], chicken: [qtyOf(before, 'Chicken'), qtyOf(after1, 'Chicken')] });
   const st = await station.get(`/api/staff/v/${V}/live`);
   check('kitchen station sees the new KOT', st.json?.orders?.some((o: any) => o.id === o1.id));
@@ -179,7 +179,8 @@ async function main() {
   section('Inventory');
   const inv0 = await stock();
   const pan = inv0.items.find((i: any) => i.name === 'Paneer');
-  check('purchase 5 kg paneer for ₹1,900', (await owner.post(`/api/staff/v/${V}/inventory`, { action: 'move', stockItemId: pan.id, kind: 'purchase', qty: 5, costPaise: 190000, supplier: 'Test Dairy' })).json?.item?.costPaise === 38000);
+  const buy = (await owner.post(`/api/staff/v/${V}/inventory`, { action: 'purchase', received: { billNo: '' }, lines: [{ stockItemId: pan.id, qty: 5, ratePaise: 38000 }] })).json?.purchase;
+  check('enter a bill: 5 kg paneer for ₹1,900', buy?.status === 'received' && buy.totalPaise === 190000 && Math.abs((await stock()).items.find((x: any) => x.id === pan.id).qty - pan.qty - 5) < 2e-3, buy);
   check('wastage needs a reason', (await owner.post(`/api/staff/v/${V}/inventory`, { action: 'move', stockItemId: pan.id, kind: 'wastage', qty: 0.5 })).status === 400);
   check('stock count sets the stock', (await owner.post(`/api/staff/v/${V}/inventory`, { action: 'move', stockItemId: pan.id, kind: 'count', qty: 9 })).json?.item?.qty === 9);
   check('cashier cannot open inventory', (await cashier.get(`/api/staff/v/${V}/inventory`)).status === 403);

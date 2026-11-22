@@ -378,7 +378,7 @@ export async function tableBill(tableSessionId: string) {
     session: ts, spotLabel: spot ? `Table ${spot.label}` : '',
     rounds: os.map(o => ({ awaitingStaff: awaitingStaff(o), id: o.id, kotNo: o.kotNo, status: o.status, createdAt: o.createdAt, totalPaise: o.totalPaise, payStatus: o.payStatus,
       channel: o.channel, discountReason: o.discountReason,
-      items: o.items.map(i => ({ id: i.id, name: lineName(i), qty: i.qty, pricePaise: i.pricePaise, veg: i.veg, note: i.note })) })),
+      items: o.items.map(i => ({ id: i.id, name: lineName(i), qty: i.qty, pricePaise: i.pricePaise, veg: i.veg, note: i.note, itemId: i.itemId, variantId: i.variantId, addonIds: i.addons.map(a => a.id).filter((x): x is string => !!x) })) })),
     subtotalPaise: sum('subtotalPaise'), discountPaise: sum('discountPaise'), taxPaise: sum('taxPaise'), totalPaise: sum('totalPaise'),
     roundOffPaise: os.reduce((a, o) => a + o.roundOffPaise, 0),
     // What is still to be paid at the table (rounds already paid one by one are not counted again).

@@ -70,3 +70,6 @@ h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.01em; text-wra
   .no-print { display: none !important; }
   body { background: #fff; }
 }
+
+/* A box that already shows a border while typing needs no second ring inside it. */
+.focus-within\:border-ink input:focus-visible, .focus-within\:border-ink select:focus-visible { outline: none; }

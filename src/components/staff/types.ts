@@ -22,10 +22,10 @@ export type TableBill = {
   session: { id: string; spotId: string; status: 'open' | 'bill_requested' | 'closed'; payStatus: 'unpaid' | 'claimed' | 'paid'; payMethod: PayMethod | null; utrLast4: string | null; openedAt: string; billRequestedAt: string | null; guests: number };
   spotLabel: string; totalPaise: number; subtotalPaise: number; taxPaise: number; discountPaise: number; roundOffPaise: number; duePaise: number;
   rounds: { awaitingStaff: boolean; id: string; kotNo: number; status: string; createdAt: string; totalPaise: number; payStatus: string; channel: Channel; discountReason: string | null;
-    items: { id: string; name: string; qty: number; pricePaise: number; veg: boolean; note: string }[] }[];
+    items: { id: string; name: string; qty: number; pricePaise: number; veg: boolean; note: string; itemId: string | null; variantId: string | null; addonIds: string[] }[] }[];
 };
 export type ServiceRequest = { id: string; spotId: string; tableSessionId: string | null; kind: 'waiter' | 'water' | 'bill'; createdAt: string; spotLabel: string };
-export type Live = { orders: Order[]; tables: TableBill[]; requests: ServiceRequest[] };
+export type Live = { venueId?: string; orders: Order[]; tables: TableBill[]; requests: ServiceRequest[] };
 export type VenueCtx = { id: string; name: string; type: string; serviceMode: string; vendorId: string; brandColor: string };
 
 /** Menu as the billing screen needs it. */
@@ -33,7 +33,7 @@ export type ItemVariant = { id: string; name: string; pricePaise: number };
 export type AddonGroup = { id: string; name: string; min: number; max: number; options: { id: string; name: string; pricePaise: number; veg: boolean }[] };
 export type MenuItemFull = {
   id: string; categoryId: string; stationId: string | null; name: string; description: string; pricePaise: number; veg: boolean; imageUrl: string | null;
-  isLive: boolean; tags: string[]; variants: ItemVariant[]; addonGroups: AddonGroup[]; sort: number;
+  isLive: boolean; tags: string[]; variants: ItemVariant[]; addonGroups: AddonGroup[]; sort: number; shortCode: string; favourite: boolean;
 };
 export type MenuData = { categories: { id: string; name: string; isLive: boolean }[]; items: MenuItemFull[]; stations: { id: string; name: string; isLive: boolean }[] };
 export const PAY_LABEL: Record<string, string> = { upi_shop: 'UPI', cash: 'Cash', card: 'Card', online: 'Paid online', split: 'Split', bill: 'Table bill' };

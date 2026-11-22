@@ -93,7 +93,7 @@ export function LiveBoard({ venue, live, role, flash, reload }: { venue: VenueCt
           </section>
         ))}
       </div>
-      <PaySheet open={!!settle} onClose={() => setSettle(null)} title={settle ? `Settle KOT ${settle.kotNo} · ${settle.spotLabel}` : ''} amountPaise={settle?.totalPaise ?? 0}
+      <PaySheet venueId={venue.id} open={!!settle} onClose={() => setSettle(null)} title={settle ? `Settle KOT ${settle.kotNo} · ${settle.spotLabel}` : ''} amountPaise={settle?.totalPaise ?? 0}
         showOnline={!!settle && settle.channel !== 'qr' && settle.channel !== 'pos'} onPay={doSettle} />
     </div>
   );

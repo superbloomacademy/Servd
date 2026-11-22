@@ -5,7 +5,7 @@ import { requireVenueAccess } from '@/lib/auth';
 import { CAN } from '@/lib/roles';
 import { audit } from '@/lib/audit';
 import { emit } from '@/lib/realtime';
-import { cleanOptions } from '@/lib/menu';
+import { cleanOptions, freeCode } from '@/lib/menu';
 
 const TABLES = { item: schema.items, category: schema.categories, station: schema.stations } as const;
 type Kind = keyof typeof TABLES;
@@ -38,6 +38,8 @@ export const PATCH = route<{ kind: string; id: string }>(async (req, { kind, id 
     if ('tags' in b && Array.isArray(b.tags)) set.tags = (b.tags as unknown[]).map(String).slice(0, 5);
     if ('categoryId' in b) set.categoryId = String(b.categoryId);
     if ('stationId' in b) set.stationId = b.stationId ? String(b.stationId) : null;
+    if (kind === 'item' && 'favourite' in b) set.favourite = !!b.favourite;
+    if (kind === 'item' && 'shortCode' in b) set.shortCode = await freeCode(row.venueId, String(b.shortCode ?? ''), id);
     if ('sort' in b) set.sort = Number(b.sort) || 0;
     if (kind === 'item' && ('variants' in b || 'addonGroups' in b)) {
       let o;

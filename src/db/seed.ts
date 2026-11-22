@@ -281,13 +281,49 @@ async function demoExtras(venue: typeof schema.venues.$inferSelect, itemRows: (t
     await setOpts('Chicken Dum Biryani', [{ id: 'half', name: 'Half', pricePaise: 26000 }, { id: 'full', name: 'Full', pricePaise: 38000 }],
       [{ id: 'extras', name: 'Extras', min: 0, max: 2, options: [{ id: 'egg', name: 'Boiled egg', pricePaise: 2000, veg: false }, { id: 'raita', name: 'Extra raita', pricePaise: 3000, veg: true }] }]);
     await setOpts('Butter Chicken', [], [{ id: 'bread', name: 'Add bread', min: 0, max: 2, options: [{ id: 'bnaan', name: 'Butter Naan', pricePaise: 7000, veg: true }, { id: 'gnaan', name: 'Garlic Naan', pricePaise: 9000, veg: true }] }]);
-    const m = await mats([['Paneer', 'kg', 8, 2, 380], ['Chicken', 'kg', 12, 3, 260], ['Basmati rice', 'kg', 20, 5, 120], ['Butter', 'kg', 3, 1, 520]]);
-    await recipe('Paneer Tikka', null, [['Paneer', 0.2]], m);
-    await recipe('Kadai Paneer', null, [['Paneer', 0.18], ['Butter', 0.02]], m);
-    await recipe('Butter Chicken', null, [['Chicken', 0.25], ['Butter', 0.03]], m);
-    await recipe('Chicken 65', null, [['Chicken', 0.22]], m);
-    await recipe('Chicken Dum Biryani', 'half', [['Chicken', 0.15], ['Basmati rice', 0.12]], m);
-    await recipe('Chicken Dum Biryani', 'full', [['Chicken', 0.25], ['Basmati rice', 0.2]], m);
+    const m = await mats([['Paneer', 'kg', 8, 2, 380], ['Chicken', 'kg', 12, 3, 260], ['Basmati rice', 'kg', 20, 5, 120], ['Butter', 'kg', 3, 1, 520], ['Cream', 'l', 1.5, 2, 240],
+      ['Onion', 'kg', 15, 5, 35], ['Tomato', 'kg', 12, 4, 40], ['Cooking oil', 'l', 14, 5, 140], ['Wheat flour', 'kg', 18, 5, 42], ['Corn', 'kg', 3, 1, 110], ['Sugar', 'kg', 6, 2, 46], ['Curd', 'kg', 4, 2, 70], ['Lemon', 'pcs', 40, 20, 4], ['Soda', 'pcs', 24, 12, 18]]);
+    const set = (name: string, x: Partial<typeof schema.stockItems.$inferInsert>) => d.update(schema.stockItems).set(x).where(eq(schema.stockItems.id, m[name]));
+    const [dairy, veg, meat] = await d.insert(schema.suppliers).values([
+      { venueId: venue.id, name: 'Sri Balaji Dairy', phone: '9000000101' }, { venueId: venue.id, name: 'Monda Market Vegetables', phone: '9000000102' }, { venueId: venue.id, name: 'Fresh Chicken Centre', phone: '9000000103' },
+    ]).returning();
+    for (const n of ['Paneer', 'Butter', 'Cream', 'Curd']) await set(n, { category: 'Dairy', supplierId: dairy.id, shelfDays: n === 'Butter' ? 30 : 4 });
+    for (const n of ['Onion', 'Tomato', 'Corn', 'Lemon']) await set(n, { category: 'Vegetables', supplierId: veg.id, yieldPct: n === 'Onion' ? 85 : n === 'Tomato' ? 90 : 100 });
+    await set('Chicken', { category: 'Meat', supplierId: meat.id, yieldPct: 90, shelfDays: 2, autoOff: true });
+    await set('Paneer', { autoOff: true });
+    for (const n of ['Basmati rice', 'Wheat flour', 'Sugar']) await set(n, { category: 'Grocery', buyUnit: 'bag', buyFactor: n === 'Sugar' ? 5 : 25 });
+    await set('Cooking oil', { category: 'Grocery', buyUnit: 'tin', buyFactor: 15 });
+    await set('Soda', { category: 'Drinks', buyUnit: 'crate', buyFactor: 24 });
+    const makeable = async (name: string, qty: number, cost: number, batchQty: number, lines: [string, number][]) => {
+      const [p] = await d.insert(schema.stockItems).values({ venueId: venue.id, name, unit: 'kg', kind: 'prep', category: 'Kitchen-made', qty, lowLevel: 1, costPaise: cost, avgCost: cost, batchQty, shelfDays: 2 }).returning();
+      await d.insert(schema.stockMoves).values({ venueId: venue.id, stockItemId: p.id, kind: 'adjust', qty, unitCost: cost, note: 'Opening stock', staffName: 'Setup' });
+      await d.insert(schema.prepLines).values(lines.map(([n, q]) => ({ venueId: venue.id, prepId: p.id, stockItemId: m[n], qty: q })));
+      m[name] = p.id;
+    };
+    await makeable('Makhani gravy', 4, 13600, 5, [['Tomato', 4], ['Onion', 1], ['Butter', 0.4], ['Cream', 0.5], ['Cooking oil', 0.2]]);
+    await makeable('Naan dough', 5, 3800, 5, [['Wheat flour', 3.4], ['Curd', 0.4], ['Cooking oil', 0.1]]);
+    await recipe('Paneer Tikka', null, [['Paneer', 0.2], ['Curd', 0.04], ['Cooking oil', 0.02]], m);
+    await recipe('Kadai Paneer', null, [['Paneer', 0.18], ['Makhani gravy', 0.15], ['Butter', 0.02]], m);
+    await recipe('Butter Chicken', null, [['Chicken', 0.22], ['Makhani gravy', 0.2], ['Butter', 0.02]], m);
+    await recipe('Chicken 65', null, [['Chicken', 0.2], ['Cooking oil', 0.05]], m);
+    await recipe('Crispy Corn', null, [['Corn', 0.2], ['Cooking oil', 0.05]], m);
+    await recipe('Butter Naan', null, [['Naan dough', 0.11], ['Butter', 0.01]], m);
+    await recipe('Garlic Naan', null, [['Naan dough', 0.11], ['Butter', 0.012]], m);
+    await recipe('Tandoori Roti', null, [['Naan dough', 0.09]], m);
+    await recipe('Sweet Lassi', null, [['Curd', 0.2], ['Sugar', 0.03]], m);
+    await recipe('Fresh Lime Soda', null, [['Soda', 1], ['Lemon', 1], ['Sugar', 0.02]], m);
+    await recipe('Chicken Dum Biryani', 'half', [['Chicken', 0.15], ['Basmati rice', 0.12], ['Onion', 0.05], ['Cooking oil', 0.02]], m);
+    await recipe('Chicken Dum Biryani', 'full', [['Chicken', 0.25], ['Basmati rice', 0.2], ['Onion', 0.08], ['Cooking oil', 0.03]], m);
+    const bc = item('Butter Chicken');
+    if (bc) await d.insert(schema.recipes).values([['bnaan', 0.01], ['gnaan', 0.012]].flatMap(([id, butter]) => [['Naan dough', 0.11], ['Butter', butter]].map(([mat, qty]) => ({ venueId: venue.id, itemId: bc.id, addonId: String(id), stockItemId: m[String(mat)], qty: Number(qty) }))));
+    const codes: [string, string, boolean][] = [['Paneer Tikka', 'PT', true], ['Chicken 65', 'C65', true], ['Butter Chicken', 'BC', true], ['Kadai Paneer', 'KP', false], ['Dal Makhani', 'DM', true], ['Chicken Dum Biryani', 'CB', true], ['Butter Naan', 'BN', true], ['Garlic Naan', 'GN', false], ['Tandoori Roti', 'TR', true], ['Sweet Lassi', 'SL', false], ['Fresh Lime Soda', 'LS', true], ['Gulab Jamun (2)', 'GJ', false]];
+    for (const [n, code, fav] of codes) { const it = item(n); if (it) await d.update(schema.items).set({ shortCode: code, favourite: fav }).where(eq(schema.items.id, it.id)); }
+    // One delivery on the way and one unpaid bill, so the flow is visible.
+    const [po] = await d.insert(schema.purchases).values({ venueId: venue.id, supplierId: veg.id, number: 2, createdBy: 'Setup' }).returning();
+    await d.insert(schema.purchaseLines).values([{ purchaseId: po.id, stockItemId: m['Onion'], unit: 'kg', factor: 1, qty: 20, ratePaise: 3400 }, { purchaseId: po.id, stockItemId: m['Tomato'], unit: 'kg', factor: 1, qty: 10, ratePaise: 4200 }]);
+    const [old] = await d.insert(schema.purchases).values({ venueId: venue.id, supplierId: dairy.id, number: 1, status: 'received', createdBy: 'Setup' }).returning();
+    await d.insert(schema.purchaseLines).values({ purchaseId: old.id, stockItemId: m['Paneer'], unit: 'kg', factor: 1, qty: 8, received: 8, ratePaise: 38000 });
+    await d.insert(schema.receipts).values({ venueId: venue.id, purchaseId: old.id, supplierId: dairy.id, billNo: 'SBD-118', billDate: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date()), subtotalPaise: 304000, taxPaise: 0, totalPaise: 304000, by: 'Setup', lines: [{ stockItemId: m['Paneer'], name: 'Paneer', qty: 8, unit: 'kg', ratePaise: 38000, taxBps: 0, expiry: null }] });
   }
   if (venue.type === 'cafe') {
     await setOpts('Cappuccino', [{ id: 'reg', name: 'Regular', pricePaise: 18000 }, { id: 'lg', name: 'Large', pricePaise: 22000 }],

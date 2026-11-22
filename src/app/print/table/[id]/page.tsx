@@ -9,13 +9,14 @@ export const dynamic = 'force-dynamic';
 const r = (p: number) => (p / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // Table bill in the vendor's name with GSTIN / FSSAI, for thermal printers.
-export default async function TableBillPrint({ params }: { params: Promise<{ id: string }> }) {
+export default async function TableBillPrint({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ print?: string }> }) {
   const { id } = await params;
+  const auto = (await searchParams).print === '1';
   const s = await getStaff();
   const bill = /^[0-9a-f-]{36}$/.test(id) ? await tableBill(id).catch(() => null) : null;
   if (!s || !bill || !(await staffCanAccessVenue(s, bill.session.venueId))) return <p className="p-8">Log in to the staff app to print bills.</p>;
   // Once the table is closed it has a numbered GST bill: show that.
-  if ((await db().select({ id: schema.invoices.id }).from(schema.invoices).where(eq(schema.invoices.tableSessionId, id)))[0]) redirect(`/print/invoice/${id}`);
+  if ((await db().select({ id: schema.invoices.id }).from(schema.invoices).where(eq(schema.invoices.tableSessionId, id)))[0]) redirect(`/print/invoice/${id}${auto ? '?print=1' : ''}`);
   const v = (await db().select({ vendor: schema.vendors, venue: schema.venues }).from(schema.venues).innerJoin(schema.vendors, eq(schema.venues.vendorId, schema.vendors.id)).where(eq(schema.venues.id, bill.session.venueId)))[0];
   const lines = new Map<string, { qty: number; price: number }>();
   bill.rounds.forEach(rd => rd.items.forEach(i => { const k = `${i.name}|${i.pricePaise}`; const c = lines.get(k) || { qty: 0, price: i.pricePaise }; c.qty += i.qty; lines.set(k, c); }));
@@ -23,7 +24,7 @@ export default async function TableBillPrint({ params }: { params: Promise<{ id:
 
   return (
     <>
-      <PrintBar label={`${bill.spotLabel} · ₹${r(bill.totalPaise)}`} />
+      <PrintBar label={`${bill.spotLabel} · ₹${r(bill.totalPaise)}`} auto={auto} />
       <style>{`@page { size: 80mm auto; margin: 3mm } body { background: #fff }`}</style>
       <div className="mx-auto w-[74mm] py-4 font-mono text-[12px] leading-snug text-black">
         {v.vendor.isDemo && <p className="mb-1 border-2 border-black text-center font-bold">SAMPLE BILL (DEMO) – NOT VALID</p>}

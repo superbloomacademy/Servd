@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { Banknote, CreditCard, Globe, Plus, Smartphone, SplitSquareHorizontal, X } from 'lucide-react';
-import { rupee } from '@/lib/client';
+import { api, rupee } from '@/lib/client';
 import { Btn, Sheet } from '@/components/ui/kit';
 import type { Payment } from './types';
 
@@ -19,8 +19,8 @@ const fmt = (p: number) => String(p / 100);
  * Take payment for a bill. This sheet is the confirmation step: the button names the exact amount and method.
  * Cash shows the change to return. Split lets the guests pay part by cash, part by UPI, etc.
  */
-export function PaySheet({ open, onClose, title, amountPaise, onPay, showOnline = false, guests = 0 }: {
-  open: boolean; onClose: () => void; title: string; amountPaise: number; onPay: (p: Payment[]) => Promise<unknown>; showOnline?: boolean; guests?: number;
+export function PaySheet({ open, onClose, title, amountPaise, onPay, showOnline = false, guests = 0, venueId, children }: {
+  venueId?: string; children?: React.ReactNode; open: boolean; onClose: () => void; title: string; amountPaise: number; onPay: (p: Payment[]) => Promise<unknown>; showOnline?: boolean; guests?: number;
 }) {
   const [mode, setMode] = useState<M | 'split'>('cash');
   const [given, setGiven] = useState('');
@@ -34,6 +34,14 @@ export function PaySheet({ open, onClose, title, amountPaise, onPay, showOnline 
     setRows([{ method: 'cash', amount: '' }, { method: 'upi_shop', amount: '' }]);
   }, [open, guests]);
 
+  const [qr, setQr] = useState<{ upiId: string; svg: string } | null>(null);
+  useEffect(() => {
+    setQr(null);
+    if (!open || mode !== 'upi_shop' || !venueId || amountPaise <= 0) return;
+    let off = false;
+    api<{ upiId: string; svg: string }>(`/api/staff/v/${venueId}/upi-qr?amount=${amountPaise}`).then(r => { if (!off && r.svg) setQr(r); }).catch(() => { /* no UPI ID saved */ });
+    return () => { off = true; };
+  }, [open, mode, venueId, amountPaise]);
   const givenP = toPaise(given);
   const change = givenP - amountPaise;
   const splitSum = rows.reduce((a, r) => a + toPaise(r.amount), 0);
@@ -90,9 +98,11 @@ export function PaySheet({ open, onClose, title, amountPaise, onPay, showOnline 
               : <p className="mt-3 rounded-xl bg-[#FDECEE] px-4 py-3 text-sm text-[#B42334]">That is {rupee(-change)} short.</p>)}
           </div>
         )}
+        {mode === 'upi_shop' && qr && <div className="mt-4 flex items-center gap-4 rounded-xl border border-line p-3"><img src={qr.svg} alt={`UPI QR for ${rupee(amountPaise)}`} width={148} height={148} /><p className="text-sm">Show this to the guest.<br />The amount <b className="tabular">{rupee(amountPaise)}</b> is already filled in.<span className="mt-1 block text-xs text-muted">{qr.upiId}</span></p></div>}
         {mode === 'upi_shop' && <p className="mt-4 rounded-xl bg-soft px-4 py-3 text-sm text-ink-2">Confirm only after you <b>hear the soundbox</b> or see the money in your bank app. Never accept a screenshot.</p>}
         {mode === 'card' && <p className="mt-4 rounded-xl bg-soft px-4 py-3 text-sm text-ink-2">Confirm after the card machine prints the slip.</p>}
 
+        {children}
         {mode === 'split' && (
           <div className="mt-4 space-y-2">
             {rows.map((r, i) => (

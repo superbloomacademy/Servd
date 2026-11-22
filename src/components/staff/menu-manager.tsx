@@ -11,7 +11,7 @@ import type { VenueCtx } from './types';
 
 type Cat = { id: string; name: string; isLive: boolean };
 type Station = { id: string; name: string; isLive: boolean };
-type Item = { id: string; categoryId: string; stationId: string | null; name: string; description: string; pricePaise: number; veg: boolean; imageUrl: string | null; isLive: boolean; tags: string[]; variants: VariantRow[]; addonGroups: GroupRow[] };
+type Item = { id: string; categoryId: string; stationId: string | null; name: string; description: string; pricePaise: number; veg: boolean; imageUrl: string | null; isLive: boolean; tags: string[]; variants: VariantRow[]; addonGroups: GroupRow[]; shortCode: string; favourite: boolean };
 type VariantRow = { id?: string; name: string; pricePaise: number };
 type GroupRow = { id?: string; name: string; min: number; max: number; options: { id?: string; name: string; pricePaise: number; veg: boolean }[] };
 const TAGS = [['bestseller', 'Bestseller'], ['must_try', 'Must try'], ['new', 'New'], ['spicy', 'Spicy']] as const;
@@ -139,7 +139,7 @@ function ItemEditor({ open, item, cats, stations, venueId, onClose, onSaved }: {
       if (!ok) return;
     }
     setBusy(true);
-    const body = { name: f.name, description: f.description || '', pricePaise, veg: !!f.veg, categoryId: f.categoryId, stationId: f.stationId || null, imageUrl: f.imageUrl || null, tags: f.tags || [], variants, addonGroups };
+    const body = { name: f.name, description: f.description || '', pricePaise, veg: !!f.veg, categoryId: f.categoryId, stationId: f.stationId || null, imageUrl: f.imageUrl || null, tags: f.tags || [], variants, addonGroups, shortCode: f.shortCode || '', favourite: !!f.favourite };
     try {
       if (isNew) await api(`/api/staff/v/${venueId}/menu`, { body: { type: 'item', ...body } });
       else await api(`/api/staff/menu/item/${item.id}`, { method: 'PATCH', body });
@@ -173,6 +173,8 @@ function ItemEditor({ open, item, cats, stations, venueId, onClose, onSaved }: {
           <Field label="Category"><select className={inputCls} value={f.categoryId || ''} onChange={e => setF({ ...f, categoryId: e.target.value })}>{cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
           <Field label="Kitchen station (KOT)"><select className={inputCls} value={f.stationId || ''} onChange={e => setF({ ...f, stationId: e.target.value || null })}><option value="">None</option>{stations.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
           <Field label="Short description" className="sm:col-span-2"><input className={inputCls} value={f.description || ''} onChange={e => setF({ ...f, description: e.target.value })} maxLength={200} placeholder="What makes it good, in one line" /></Field>
+          <Field label="Short code for billing" hint="Type it on the billing screen, e.g. BC or 12"><input className={inputCls} value={f.shortCode || ''} onChange={e => setF({ ...f, shortCode: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) })} /></Field>
+          <label className="flex items-center gap-2 self-center text-sm font-semibold"><input type="checkbox" checked={!!f.favourite} onChange={e => setF({ ...f, favourite: e.target.checked })} />Show in Favourites on the billing screen</label>
           <div className="sm:col-span-2">
             <p className="mb-1.5 text-[13px] font-semibold text-ink-2">Tags</p>
             <div className="flex flex-wrap gap-2">

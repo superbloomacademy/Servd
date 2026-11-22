@@ -101,7 +101,7 @@ export function StaffShell() {
 
   const loadLive = useCallback(async () => {
     if (!venueId) return;
-    try { setLive(await api<Live>(`/api/staff/v/${venueId}/live`)); } catch { /* keep */ }
+    try { setLive({ ...(await api<Live>(`/api/staff/v/${venueId}/live`)), venueId }); } catch { /* keep */ }
   }, [venueId]);
   const loadOpen = useCallback(async () => {
     if (!venueId) return;
@@ -119,7 +119,8 @@ export function StaffShell() {
         const orders = i >= 0 ? l.orders.map(o => (o.id === m.order.id ? m.order : o)) : [m.order, ...l.orders];
         return { ...l, orders };
       });
-      const relevant = !myStation || m.order.kots.some(k => k.stationId === myStation && k.status === 'new');
+      // An order typed in at the counter is news to the kitchen, not to the person on the billing screen.
+      const relevant = myStation ? m.order.kots.some(k => k.stationId === myStation && k.status === 'new') : !(tab === 'pos' && m.kind === 'new' && m.order.channel !== 'qr');
       if ((m.kind === 'new' || m.kind === 'payment_claim') && relevant) {
         setFlash(f => new Set(f).add(m.order.id));
         setTimeout(() => setFlash(f => { const n = new Set(f); n.delete(m.order.id); return n; }), 8000);
@@ -149,14 +150,18 @@ export function StaffShell() {
   const logout = async () => { await api('/api/staff/logout', { body: {} }); router.replace('/staff/login'); };
   const pending = live.orders.filter(o => (o.status === 'awaiting_payment' && o.payStatus !== 'unpaid') || needsAccept(o)).length + live.requests.length;
   const v = me.venues.find(x => x.id === venue.id)!;
+  // Billing needs the width: the side menu becomes a narrow strip of icons there.
+  const slim = tab === 'pos';
+  const hideSlim = slim ? 'lg:hidden' : '';
 
   return (
-    <div style={brandVars(venue.brandColor)} className="min-h-dvh bg-soft lg:grid lg:grid-cols-[248px_1fr]">
+    <div style={brandVars(venue.brandColor)} className={`min-h-dvh bg-soft lg:grid ${slim ? 'lg:grid-cols-[68px_1fr]' : 'lg:grid-cols-[248px_1fr]'}`}>
       {/* Side menu: the list of screens scrolls on its own, so the controls at the bottom are always reachable on short screens. */}
       <aside className="border-b border-line bg-white lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col lg:border-r lg:border-b-0">
-        <div className="flex shrink-0 items-center gap-3 px-4 py-3 lg:py-4">
+        <div className={`flex shrink-0 items-center gap-3 px-4 py-3 lg:py-4 ${slim ? 'lg:flex-col lg:gap-1.5 lg:px-2 lg:py-3' : ''}`}>
           <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand font-extrabold text-brand-ink">{v.vendor.name.slice(0, 1)}</div>
-          <div className="min-w-0 flex-1">
+          {v.vendor.isDemo && slim && <b className="hidden rounded border border-dashed border-[#9A5500] bg-[#FFF8EC] px-1 text-[10px] tracking-wide text-[#7A4A00] uppercase lg:block">Demo</b>}
+          <div className={`min-w-0 flex-1 ${hideSlim}`}>
             <p className="truncate font-bold">{v.vendor.name}</p>
             {me.venues.length > 1 ? (
               <select aria-label="Venue" value={venue.id} onChange={e => { setVenueId(e.target.value); store.set('sv_staff_venue', e.target.value); }} className="w-full truncate bg-transparent text-xs text-muted outline-none">
@@ -179,22 +184,22 @@ export function StaffShell() {
         </div>
         <nav className="no-scrollbar side-scroll flex gap-1 overflow-x-auto px-3 pb-3 lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-x-hidden lg:overflow-y-auto">
           {nav.map(n => (
-            <button key={n.key} onClick={() => go(n.key)} aria-current={tab === n.key ? 'page' : undefined}
-              className={`flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold whitespace-nowrap transition ${tab === n.key ? 'bg-ink text-white' : 'text-ink-2 hover:bg-soft'}`}>
-              <n.icon size={18} />{n.label}
-              {n.key === 'live' && pending > 0 && <span className="ml-auto rounded-full bg-bad px-1.5 text-[11px] font-bold text-white">{pending}</span>}
+            <button key={n.key} onClick={() => go(n.key)} aria-current={tab === n.key ? 'page' : undefined} title={slim ? n.label : undefined}
+              className={`relative flex shrink-0 ${slim ? 'lg:justify-center lg:px-0' : ''} items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold whitespace-nowrap transition ${tab === n.key ? 'bg-ink text-white' : 'text-ink-2 hover:bg-soft'}`}>
+              <n.icon size={18} /><span className={slim ? 'lg:sr-only' : ''}>{n.label}</span>
+              {n.key === 'live' && pending > 0 && <span className={`ml-auto rounded-full bg-bad px-1.5 text-[11px] font-bold text-white ${slim ? 'lg:absolute lg:top-0.5 lg:right-0.5' : ''}`}>{pending}</span>}
             </button>
           ))}
         </nav>
-        <div className="hidden shrink-0 space-y-2 border-t border-line p-3 text-sm lg:block">
-          {me.staff.role === 'super_admin' && <a href="/admin" onClick={() => store.del('sv_admin_venue')} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 font-semibold text-ink-2 hover:bg-soft">← Back to super admin</a>}
+        <div className={`hidden shrink-0 space-y-2 border-t border-line text-sm lg:block ${slim ? 'p-2' : 'p-3'}`}>
+          {me.staff.role === 'super_admin' && <a href="/admin" onClick={() => store.del('sv_admin_venue')} title="Back to super admin" className="flex w-full items-center gap-2 rounded-xl px-3 py-2 font-semibold text-ink-2 hover:bg-soft">←{!slim && ' Back to super admin'}</a>}
           {['owner', 'manager'].includes(role) && isOpen !== null && (
-            <button onClick={toggleOpen} className={`flex w-full items-center gap-2 rounded-xl px-3 py-2.5 font-semibold ${isOpen ? 'bg-[#E7F6EF] text-[#11734E]' : 'bg-[#FDECEE] text-[#B42334]'}`}>
-              {isOpen ? <Pause size={16} /> : <Play size={16} />}{isOpen ? 'Taking orders' : 'Orders paused'}
+            <button onClick={toggleOpen} title={isOpen ? 'Taking orders' : 'Orders paused'} aria-label={isOpen ? 'Taking orders. Click to pause' : 'Orders paused. Click to start'} className={`flex w-full items-center gap-2 rounded-xl px-3 py-2.5 font-semibold ${slim ? 'justify-center' : ''} ${isOpen ? 'bg-[#E7F6EF] text-[#11734E]' : 'bg-[#FDECEE] text-[#B42334]'}`}>
+              {isOpen ? <Pause size={16} /> : <Play size={16} />}{!slim && (isOpen ? 'Taking orders' : 'Orders paused')}
             </button>
           )}
-          <div className="flex items-center gap-1">
-            <p className="flex min-w-0 flex-1 items-center gap-2 px-2 text-xs text-muted"><span className={`h-2 w-2 shrink-0 rounded-full ${connected ? 'bg-good' : 'bg-faint'}`} /><span className="truncate">{connected ? 'Live' : 'Reconnecting…'} · {me.staff.name}</span></p>
+          <div className={`flex items-center gap-1 ${slim ? 'flex-col' : ''}`}>
+            <p className="flex min-w-0 flex-1 items-center gap-2 px-2 text-xs text-muted" title={me.staff.name}><span className={`h-2 w-2 shrink-0 rounded-full ${connected ? 'bg-good' : 'bg-faint'}`} /><span className={slim ? 'sr-only' : 'truncate'}>{connected ? 'Live' : 'Reconnecting…'} · {me.staff.name}</span></p>
             <button onClick={() => { setSound(s => !s); store.set('sv_sound', !sound); }} className="rounded-lg p-2 text-muted hover:bg-soft" aria-label={sound ? 'Sound on. Click to mute' : 'Sound off. Click to turn on'} title={sound ? 'Sound on' : 'Sound off'}>
               {sound ? <Volume2 size={17} /> : <VolumeX size={17} />}
             </button>
@@ -203,9 +208,9 @@ export function StaffShell() {
         </div>
       </aside>
 
-      <main className="min-w-0 px-4 py-5 sm:px-6 lg:py-7">
+      <main className={`min-w-0 px-4 ${slim ? 'py-3 lg:px-3' : 'py-5 sm:px-6 lg:py-7'}`}>
         {v.vendor.isDemo && (
-          <p className="mb-4 rounded-xl border border-dashed border-[#E8C08A] bg-[#FFF8EC] px-3.5 py-2 text-[13px] text-[#7A4A00]">
+          <p className={`${slim ? 'lg:hidden' : ''} mb-4 rounded-xl border border-dashed border-[#E8C08A] bg-[#FFF8EC] px-3.5 py-2 text-[13px] text-[#7A4A00]`}>
             <b className="mr-1.5 rounded border border-dashed border-[#9A5500] px-1 text-[11px] tracking-wide uppercase">Demo</b>Sample venue with sample data, for showing how Servd works. Orders and bills here are not real.
           </p>
         )}
@@ -216,7 +221,7 @@ export function StaffShell() {
         {tab === 'live' && <LiveBoard venue={venue} live={live} role={role} flash={flash} reload={loadLive} />}
         {tab === 'kitchen' && <Kitchen venue={venue} live={live} role={role} myStation={myStation} flash={flash} reload={loadLive} />}
         {tab === 'tables' && <Tables venue={venue} live={live} role={role} reload={loadLive} onOrder={sid => { if (!nav.some(n => n.key === 'pos')) { toast('Taking orders from this screen needs the Billing module.', 'bad'); return; } setPresetSpot(sid); go('pos'); }} />}
-        {tab === 'pos' && <Pos venue={venue} live={live} role={role} presetSpot={presetSpot} clearPreset={clearPreset} reload={loadLive} />}
+        {tab === 'pos' && <Pos key={venue.id} venue={venue} live={live} role={role} presetSpot={presetSpot} clearPreset={clearPreset} reload={loadLive} />}
         {tab === 'reports' && <Reports venue={venue} />}
         {tab === 'cash' && <CashDrawer venue={venue} />}
         {tab === 'inventory' && <Inventory venue={venue} />}

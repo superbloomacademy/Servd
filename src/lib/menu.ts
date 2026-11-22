@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { randomCode } from './util';
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import { db, schema } from '@/db';
+import { bad } from './api';
 
 // Full menu for a venue, with live/off state already resolved for customers.
 export async function venueMenu(venueId: string) {
@@ -55,4 +56,14 @@ export function cleanOptions(variants: unknown, groups: unknown) {
   const names = v.map(x => x.name.toLowerCase());
   if (new Set(names).size !== names.length) throw new Error('Two sizes have the same name');
   return { variants: v, addonGroups: g, minPrice: v.length ? Math.min(...v.map(x => x.pricePaise)) : null };
+}
+
+/** Short code for fast typing at the counter. Two dishes may never share one. */
+export async function freeCode(venueId: string, raw: string, itemId?: string) {
+  const code = raw.trim().toUpperCase();
+  if (!code) return '';
+  if (!/^[A-Z0-9]{1,6}$/.test(code)) throw bad('A short code is 1–6 letters or numbers, e.g. BC or 12.');
+  const same = (await db().select({ id: schema.items.id, name: schema.items.name }).from(schema.items).where(and(eq(schema.items.venueId, venueId), eq(schema.items.shortCode, code)))).find(x => x.id !== itemId);
+  if (same) throw bad(`Short code ${code} is already used by ${same.name}.`);
+  return code;
 }
