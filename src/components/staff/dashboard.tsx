@@ -43,7 +43,7 @@ export function Dashboard({ venue }: { venue: VenueCtx }) {
 
           <section className="mt-4 rounded-2xl bg-white p-5">
             <h2 className="font-bold">Online vs cash · settlement</h2>
-            <p className="text-xs text-muted">Testing phase: every payment goes straight to your own UPI or cash drawer. Platform commission is {s.settlement.commissionBps / 100}% of orders guests place by QR. Orders you bill at the counter carry no commission.</p>
+            <p className="text-xs text-muted">Every payment goes straight to your own UPI or cash drawer. Platform commission is {s.settlement.commissionBps / 100}% of orders guests place by QR. Orders you bill at the counter carry no commission.</p>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <Money icon={<Smartphone size={18} />} label="UPI to your account" amount={upi.amount} n={upi.orders} total={s.revenue} color="var(--brand)" />
               <Money icon={<Banknote size={18} />} label="Cash at counter" amount={cash.amount} n={cash.orders} total={s.revenue} color="#1BA672" />

@@ -169,7 +169,7 @@ function Card({ title, hint, children }: { title: string; hint?: string; childre
   return <section className="rounded-2xl bg-white p-5"><h2 className="font-bold">{title}</h2>{hint && <p className="text-xs text-muted">{hint}</p>}<div className="mt-3">{children}</div></section>;
 }
 function Rows({ rows }: { rows: [string, number][] }) {
-  return <div className="tabular space-y-1 text-sm">{rows.map(([l, v]) => <div key={l} className="flex justify-between"><span className="text-ink-2">{l}</span><span>{v < 0 ? `−${rupee(-v)}` : rupee(v)}</span></div>)}</div>;
+  return <div className="tabular space-y-1 text-sm">{rows.map(([l, v]) => <div key={l} className="flex justify-between"><span className="text-ink-2">{l}</span><span>{v < 0 ? `−${rupee(-v)}` : rupee(v || 0)}</span></div>)}</div>;
 }
 function Share({ list }: { list: { label: string; amount: number; sub: string }[] }) {
   const total = Math.max(1, list.reduce((a, x) => a + x.amount, 0));

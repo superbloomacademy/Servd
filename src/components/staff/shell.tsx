@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   LayoutDashboard, ListOrdered, ChefHat, Armchair, Footprints, BookOpenText, QrCode, BadgePercent, Users, Settings, MessageCircleQuestion, History, LogOut, Volume2, VolumeX, Pause, Play, Rocket, ReceiptText, Calculator, BarChart3, Wallet, Boxes, Contact,
@@ -30,26 +30,26 @@ import { Inventory } from './inventory';
 import { Customers } from './customers';
 
 type Tab = 'setup' | 'gst' | 'dashboard' | 'pos' | 'reports' | 'cash' | 'inventory' | 'customers' | 'live' | 'kitchen' | 'tables' | 'runner' | 'menu' | 'qr' | 'coupons' | 'team' | 'settings' | 'support' | 'activity';
-const NAV: { key: Tab; label: string; icon: React.ComponentType<{ size?: number }>; roles: Role[]; modes?: string[]; feature?: 'pos' | 'inventory' | 'customers' }[] = [
+const NAV: { key: Tab; label: string; icon: React.ComponentType<{ size?: number }>; roles: Role[]; modes?: string[]; feature?: 'pos' | 'inventory' | 'customers'; group?: string }[] = [
   { key: 'setup', label: 'Get started', icon: Rocket, roles: ['owner', 'manager'] },
   { key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['owner', 'manager'] },
-  { key: 'pos', label: 'Billing', icon: Calculator, roles: ['owner', 'manager', 'cashier', 'captain'], feature: 'pos' },
-  { key: 'tables', label: 'Tables', icon: Armchair, roles: ['owner', 'manager', 'cashier', 'captain'], modes: ['table_bill', 'table_prepay'] },
-  { key: 'live', label: 'Orders & payments', icon: ListOrdered, roles: ['owner', 'manager', 'cashier', 'captain'] },
-  { key: 'kitchen', label: 'Kitchen (KOT)', icon: ChefHat, roles: ['owner', 'manager', 'cashier', 'station'] },
-  { key: 'runner', label: 'Seat delivery', icon: Footprints, roles: ['owner', 'manager', 'runner', 'captain'], modes: ['seat_delivery'] },
-  { key: 'menu', label: 'Menu', icon: BookOpenText, roles: ['owner', 'manager'] },
-  { key: 'qr', label: 'QR codes', icon: QrCode, roles: ['owner', 'manager'] },
-  { key: 'coupons', label: 'Coupons', icon: BadgePercent, roles: ['owner', 'manager'] },
-  { key: 'reports', label: 'Day-end reports', icon: BarChart3, roles: ['owner', 'manager', 'cashier'] },
-  { key: 'cash', label: 'Cash drawer', icon: Wallet, roles: ['owner', 'manager', 'cashier'], feature: 'pos' },
-  { key: 'inventory', label: 'Inventory', icon: Boxes, roles: ['owner', 'manager'], feature: 'inventory' },
-  { key: 'customers', label: 'Customers', icon: Contact, roles: ['owner', 'manager'], feature: 'customers' },
-  { key: 'gst', label: 'GST bills', icon: ReceiptText, roles: ['owner', 'manager'] },
-  { key: 'support', label: 'Customer help', icon: MessageCircleQuestion, roles: ['owner', 'manager'] },
-  { key: 'team', label: 'Staff logins', icon: Users, roles: ['owner'] },
-  { key: 'settings', label: 'Settings & brand', icon: Settings, roles: ['owner'] },
-  { key: 'activity', label: 'Activity log', icon: History, roles: ['owner', 'manager'] },
+  { key: 'pos', label: 'Billing', icon: Calculator, roles: ['owner', 'manager', 'cashier', 'captain'], feature: 'pos', group: 'Service' },
+  { key: 'tables', label: 'Tables', icon: Armchair, roles: ['owner', 'manager', 'cashier', 'captain'], modes: ['table_bill', 'table_prepay'], group: 'Service' },
+  { key: 'live', label: 'Orders & payments', icon: ListOrdered, roles: ['owner', 'manager', 'cashier', 'captain'], group: 'Service' },
+  { key: 'kitchen', label: 'Kitchen (KOT)', icon: ChefHat, roles: ['owner', 'manager', 'cashier', 'station'], group: 'Service' },
+  { key: 'runner', label: 'Seat delivery', icon: Footprints, roles: ['owner', 'manager', 'runner', 'captain'], modes: ['seat_delivery'], group: 'Service' },
+  { key: 'menu', label: 'Menu', icon: BookOpenText, roles: ['owner', 'manager'], group: 'Menu & stock' },
+  { key: 'inventory', label: 'Inventory', icon: Boxes, roles: ['owner', 'manager'], feature: 'inventory', group: 'Menu & stock' },
+  { key: 'qr', label: 'QR codes', icon: QrCode, roles: ['owner', 'manager'], group: 'Menu & stock' },
+  { key: 'coupons', label: 'Coupons', icon: BadgePercent, roles: ['owner', 'manager'], group: 'Menu & stock' },
+  { key: 'reports', label: 'Day-end reports', icon: BarChart3, roles: ['owner', 'manager', 'cashier'], group: 'Money' },
+  { key: 'cash', label: 'Cash drawer', icon: Wallet, roles: ['owner', 'manager', 'cashier'], feature: 'pos', group: 'Money' },
+  { key: 'gst', label: 'GST bills', icon: ReceiptText, roles: ['owner', 'manager'], group: 'Money' },
+  { key: 'customers', label: 'Customers', icon: Contact, roles: ['owner', 'manager'], feature: 'customers', group: 'Business' },
+  { key: 'support', label: 'Customer help', icon: MessageCircleQuestion, roles: ['owner', 'manager'], group: 'Business' },
+  { key: 'team', label: 'Staff logins', icon: Users, roles: ['owner'], group: 'Business' },
+  { key: 'settings', label: 'Settings & brand', icon: Settings, roles: ['owner'], group: 'Business' },
+  { key: 'activity', label: 'Activity log', icon: History, roles: ['owner', 'manager'], group: 'Business' },
 ];
 const HOME: Record<Role, Tab> = { super_admin: 'dashboard', owner: 'dashboard', manager: 'live', cashier: 'pos', station: 'kitchen', captain: 'tables', runner: 'runner' };
 
@@ -67,6 +67,9 @@ export function StaffShell() {
   const [isOpen, setIsOpen] = useState<boolean | null>(null);
   const [presetSpot, setPresetSpot] = useState<string | null>(null);
   const clearPreset = useCallback(() => setPresetSpot(null), []);
+  // Phones: the strip of screens scrolls sideways, so bring the open one into view.
+  const activeNav = useRef<HTMLButtonElement>(null);
+  useEffect(() => { activeNav.current?.scrollIntoView({ block: 'nearest', inline: 'center' }); }, [tab]);
   const refetch = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -183,13 +186,14 @@ export function StaffShell() {
           <button onClick={logout} className="rounded-lg p-2 text-muted hover:bg-soft lg:hidden" aria-label="Log out"><LogOut size={18} /></button>
         </div>
         <nav className="no-scrollbar side-scroll flex gap-1 overflow-x-auto px-3 pb-3 lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-x-hidden lg:overflow-y-auto">
-          {nav.map(n => (
-            <button key={n.key} onClick={() => go(n.key)} aria-current={tab === n.key ? 'page' : undefined} title={slim ? n.label : undefined}
-              className={`relative flex shrink-0 ${slim ? 'lg:justify-center lg:px-0' : ''} items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold whitespace-nowrap transition ${tab === n.key ? 'bg-ink text-white' : 'text-ink-2 hover:bg-soft'}`}>
+          {nav.map((n, i) => (<Fragment key={n.key}>
+            {nav.length > 8 && !slim && n.group && n.group !== nav[i - 1]?.group && <p className="hidden px-3 pt-2.5 pb-0.5 text-[11px] font-bold tracking-wide text-faint uppercase lg:block">{n.group}</p>}
+            <button ref={tab === n.key ? activeNav : undefined} onClick={() => go(n.key)} aria-current={tab === n.key ? 'page' : undefined} title={slim ? n.label : undefined}
+              className={`relative flex shrink-0 ${slim ? 'lg:justify-center lg:px-0' : ''} items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-semibold whitespace-nowrap transition ${slim ? '' : 'lg:py-[7px]'} ${tab === n.key ? 'bg-ink text-white' : 'text-ink-2 hover:bg-soft'}`}>
               <n.icon size={18} /><span className={slim ? 'lg:sr-only' : ''}>{n.label}</span>
               {n.key === 'live' && pending > 0 && <span className={`ml-auto rounded-full bg-bad px-1.5 text-[11px] font-bold text-white ${slim ? 'lg:absolute lg:top-0.5 lg:right-0.5' : ''}`}>{pending}</span>}
             </button>
-          ))}
+          </Fragment>))}
         </nav>
         <div className={`hidden shrink-0 space-y-2 border-t border-line text-sm lg:block ${slim ? 'p-2' : 'p-3'}`}>
           {me.staff.role === 'super_admin' && <a href="/admin" onClick={() => store.del('sv_admin_venue')} title="Back to super admin" className="flex w-full items-center gap-2 rounded-xl px-3 py-2 font-semibold text-ink-2 hover:bg-soft">←{!slim && ' Back to super admin'}</a>}

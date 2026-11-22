@@ -88,7 +88,7 @@ export function Kitchen({ venue, live, role, myStation, flash, reload }: { venue
   return (
     <div>
       <PageHead title={stationName ? `${stationName} · KOT` : 'Kitchen tickets (KOT)'}
-        sub="Oldest tickets first. Tap Start when you begin and Ready when it’s packed. Interval orders appear here about 15 minutes before the interval."
+        sub={`Oldest tickets first. Tap Start when you begin and Ready when it’s ${venue.serviceMode === 'seat_delivery' ? 'packed. Interval orders appear here about 15 minutes before the interval.' : 'done.'}`}
         right={<>
           <label className="flex items-center gap-2 rounded-xl border border-line bg-white px-3 py-2 text-sm font-semibold"><Printer size={16} />Auto-print<Toggle on={autoPrint} onChange={flipAutoPrint} label="Auto-print new KOTs" /></label>
           {!myStation && (
@@ -107,7 +107,7 @@ export function Kitchen({ venue, live, role, myStation, flash, reload }: { venue
 
       <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
         <div>
-          {held > 0 && <p className="mb-3 text-sm text-muted">{held} order{held > 1 ? 's' : ''} waiting for payment or the interval. They’ll appear here when it’s time.</p>}
+          {held > 0 && <p className="mb-3 text-sm text-muted">{held} order{held > 1 ? 's' : ''} waiting {venue.serviceMode === 'seat_delivery' ? 'for payment or the interval' : venue.serviceMode === 'table_bill' ? 'for staff to accept' : 'for payment'}. They’ll appear here then.</p>}
           <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-3">
             {tickets.map(({ o, k, items: its }) => (
               <article key={k.id} className={`relative rounded-md border bg-white p-4 font-mono ${flash.has(o.id) ? 'anim-pop border-brand' : 'border-line'} ${k.status === 'preparing' ? 'border-l-4 border-l-warn' : 'border-l-4 border-l-[#2F6FDB]'}`}>

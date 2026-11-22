@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FileSpreadsheet, ImagePlus, Pencil, Plus, Trash2, X } from 'lucide-react';
+import { FileSpreadsheet, ImagePlus, Pencil, Plus, Trash2, X, Star } from 'lucide-react';
 import { api, rupee, shrinkImage } from '@/lib/client';
 import { Btn, Field, Pill, Sheet, Toggle, VegMark, inputCls } from '@/components/ui/kit';
 import { useConfirm, useToast } from '@/components/ui/providers';
@@ -11,7 +11,7 @@ import type { VenueCtx } from './types';
 
 type Cat = { id: string; name: string; isLive: boolean };
 type Station = { id: string; name: string; isLive: boolean };
-type Item = { id: string; categoryId: string; stationId: string | null; name: string; description: string; pricePaise: number; veg: boolean; imageUrl: string | null; isLive: boolean; tags: string[]; variants: VariantRow[]; addonGroups: GroupRow[]; shortCode: string; favourite: boolean };
+type Item = { id: string; categoryId: string; stationId: string | null; name: string; description: string; pricePaise: number; veg: boolean; imageUrl: string | null; isLive: boolean; tags: string[]; variants: VariantRow[]; addonGroups: GroupRow[]; shortCode: string; favourite: boolean; stockOff: boolean };
 type VariantRow = { id?: string; name: string; pricePaise: number };
 type GroupRow = { id?: string; name: string; min: number; max: number; options: { id?: string; name: string; pricePaise: number; veg: boolean }[] };
 const TAGS = [['bestseller', 'Bestseller'], ['must_try', 'Must try'], ['new', 'New'], ['spicy', 'Spicy']] as const;
@@ -23,6 +23,8 @@ export function MenuManager({ venue }: { venue: VenueCtx }) {
   const [items, setItems] = useState<Item[]>([]);
   const [stations, setStations] = useState<Station[]>([]);
   const [edit, setEdit] = useState<Partial<Item> | null>(null);
+  const [q, setQ] = useState('');
+  const [off, setOff] = useState(false);
   const [importing, setImporting] = useState(false);
 
   const load = useCallback(async () => {
@@ -56,9 +58,11 @@ export function MenuManager({ venue }: { venue: VenueCtx }) {
         right={<><Btn tone="outline" onClick={() => setImporting(true)}><FileSpreadsheet size={16} />Upload from Excel</Btn><Btn tone="outline" onClick={() => addNamed('category')}><Plus size={16} />Category</Btn><Btn tone="dark" onClick={() => setEdit({ veg: true, tags: [], categoryId: cats[0]?.id, stationId: stations[0]?.id ?? null })}><Plus size={16} />Add item</Btn></>} />
 
       <div className="grid gap-5 xl:grid-cols-[1fr_300px]">
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
+          <div className="flex flex-wrap gap-2"><input value={q} onChange={e => setQ(e.target.value)} placeholder="Search dishes or short codes" aria-label="Search dishes" className={`${inputCls} max-w-sm bg-white`} />{items.some(i => !i.isLive) && <button onClick={() => setOff(o => !o)} aria-pressed={off} className={`rounded-xl border px-3.5 text-sm font-semibold ${off ? 'border-ink bg-ink text-white' : 'border-line bg-white'}`}>Switched off ({items.filter(i => !i.isLive).length})</button>}</div>
           {cats.map(c => {
-            const list = items.filter(i => i.categoryId === c.id);
+            const list = items.filter(i => i.categoryId === c.id && (!off || !i.isLive) && (!q.trim() || i.name.toLowerCase().includes(q.trim().toLowerCase()) || i.shortCode?.toLowerCase() === q.trim().toLowerCase()));
+            if (!list.length && (q.trim() || off)) return null;
             return (
               <section key={c.id} className="rounded-2xl bg-white">
                 <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
@@ -70,10 +74,10 @@ export function MenuManager({ venue }: { venue: VenueCtx }) {
                     <li key={it.id} className="flex items-center gap-3 px-4 py-3">
                       <FoodArt name={it.name} category={c.name} imageUrl={it.imageUrl} size={48} className={`!rounded-xl ${it.isLive ? '' : 'grayscale opacity-60'}`} />
                       <div className="min-w-0 flex-1">
-                        <p className={`flex items-center gap-2 font-semibold ${it.isLive ? '' : 'text-faint'}`}><VegMark veg={it.veg} size={12} /><span className="truncate">{it.name}</span></p>
+                        <p className={`flex items-center gap-2 font-semibold ${it.isLive ? '' : 'text-faint'}`}><VegMark veg={it.veg} size={12} /><span className="truncate">{it.name}</span>{it.shortCode && <span className="rounded bg-soft px-1.5 text-[11px] font-semibold text-muted">{it.shortCode}</span>}{it.favourite && <Star size={13} className="shrink-0 text-muted" aria-label="Favourite" />}</p>
                         <p className="tabular text-sm text-muted">{it.variants?.length ? it.variants.map(v => `${v.name} ${rupee(v.pricePaise)}`).join(" / ") : rupee(it.pricePaise)} · {stations.find(s => s.id === it.stationId)?.name || 'No station'}{it.tags.length ? ` · ${it.tags.join(', ').replace('_', ' ')}` : ''}</p>
                       </div>
-                      {!it.isLive && <Pill tone="bad">Sold out</Pill>}
+                      {!it.isLive && <Pill tone="bad">{it.stockOff ? 'Out of stock' : 'Sold out'}</Pill>}
                       <Toggle on={it.isLive} onChange={() => toggle('item', it)} label={`${it.name} live`} />
                       <button onClick={() => setEdit(it)} className="rounded-lg p-2 text-muted hover:bg-soft" aria-label={`Edit ${it.name}`}><Pencil size={16} /></button>
                     </li>

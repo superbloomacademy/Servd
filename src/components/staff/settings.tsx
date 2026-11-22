@@ -110,7 +110,7 @@ export function VenueSettings({ venue, onSaved }: { venue: VenueCtx; onSaved: ()
 
       <section className="mt-4 rounded-2xl bg-white p-5">
         <h2 className="font-bold">Payments</h2>
-        <p className="text-xs text-muted">Testing phase: customers pay your own UPI. Staff confirm each payment after hearing the soundbox or checking the bank app.</p>
+        <p className="text-xs text-muted">Customers pay your own UPI. Staff confirm each payment after hearing the soundbox or checking the bank app.</p>
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <Field label="Your UPI ID" hint="A business/merchant UPI ID works best"><input className={`${inputCls} font-mono`} value={v.upiId || ''} onChange={e => setV({ ...v, upiId: e.target.value.trim() })} placeholder="shopname@okaxis" /></Field>
           <Field label="Name shown for UPI"><input className={inputCls} value={v.upiName || ''} onChange={e => setV({ ...v, upiName: e.target.value })} /></Field>

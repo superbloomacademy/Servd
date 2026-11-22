@@ -20,12 +20,16 @@ Stop with **Ctrl+C**.
 | `npm run build` then `npm start` | Production build and run |
 | `npm run typecheck` | Check the code for type errors |
 | `npm run db:generate` | After changing `src/db/schema.ts`: create a new database migration |
-| `npm run test:e2e` | Full end-to-end test, 147 checks: every route, live updates, security. Needs testing mode: start the app with `EMAIL_PROVIDER=off npm start` (after `npm run build`) |
+| `npm run test:e2e` | Full end-to-end test, 154 checks: every route, live updates, security. Needs testing mode: start the app with `EMAIL_PROVIDER=off npm start` (after `npm run build`) |
 | `npm run db:migrate` | Update database tables (Vercel runs this automatically on every deploy) |
 | `npm run test:login` | Customer email-OTP login test, 18 checks |
 | `npm run test:demo` | Demo-for-pitches test, 28 checks: create / refresh / remove the demo vendors, PIN rules, kept out of totals and billing, Demo marks. Ends with a fresh demo (PIN 1234) |
+| `npm run test:inv` | Inventory with hand-worked numbers, 58 checks: buying, costs, recipes, batches, sales, counts, transfers, report, access |
+| `npm run test:inv-ui` | Inventory screens clicked through in Edge, 36 checks (fresh demo first) |
+| `npm run test:billing` | Billing screen in Edge, 40 checks (fresh demo first) |
+| `npm run test:ux` | Kitchen, first-order accept and small-laptop checks in Edge, 15 |
 | `npm run test:scroll` | Opens every screen of every role (and super admin) in Edge at laptop and phone sizes and checks nothing is cut off or stuck. Report in `.data/scroll-audit/` |
-| `npm run test:pos` | Billing (POS) + admin modules test, 101 checks: billing screen, sizes/add-ons, tables, split payment, discounts, cancellations, cash drawer, inventory, reports. Uses the demo restaurant; same testing mode as above |
+| `npm run test:pos` | Billing (POS) + admin modules test, 102 checks: billing screen, sizes/add-ons, tables, split payment, discounts, cancellations, cash drawer, inventory, reports. Uses the demo restaurant; same testing mode as above |
 
 **On your phone:** connect it to the same Wi-Fi and open the address printed at start-up (e.g. `http://192.168.1.7:3001`).
 QR codes point to that address. Before printing real stickers, set `PUBLIC_BASE_URL` in `.env` to your real web address.

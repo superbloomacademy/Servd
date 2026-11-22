@@ -19,7 +19,8 @@
     "test:demo": "tsx tests/demo.ts",
     "test:ux": "node tests/ux.mjs",
     "test:inv": "tsx tests/inventory.ts",
-    "test:billing": "node tests/billing.mjs"
+    "test:billing": "node tests/billing.mjs",
+    "test:inv-ui": "node tests/inventory-ui.mjs"
   },
   "dependencies": {
     "cross-env": "7.0.3",

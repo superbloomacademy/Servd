@@ -225,7 +225,7 @@ export async function receivePurchase(venueId: string, s: Staff, raw: unknown) {
   await checkBill(venueId, p.supplierId, b);
   const mats = await materials(venueId);
   const sup = p.supplierId ? await supplier(venueId, p.supplierId) : null;
-  const touched = await db().transaction(async tx => {
+  const { touched, total } = await db().transaction(async tx => {
     const ls = await tx.select().from(schema.purchaseLines).where(eq(schema.purchaseLines.purchaseId, p.id)).for('update');
     const got = b.lines.filter(l => l.qty > 0).map(l => { const line = ls.find(x => x.id === l.lineId); if (!line) throw bad('This line is not part of the purchase.'); return { ...l, line, m: mats.find(m => m.id === line.stockItemId)! }; });
     if (!got.length) throw bad('Enter how much arrived.');
@@ -245,10 +245,10 @@ export async function receivePurchase(venueId: string, s: Staff, raw: unknown) {
     const ids = await applyChanges(venueId, got.map(g => ({ stockItemId: g.m.id, qty: g.qty * g.line.factor, kind: 'purchase' as const, totalPaise: net(g) + tax(g), refId: rec.id, supplier: sup?.name ?? '', note: b.billNo ? `Bill ${b.billNo}` : `Purchase ${p.number}` })), s.name, tx);
     const after = await tx.select().from(schema.purchaseLines).where(eq(schema.purchaseLines.purchaseId, p.id));
     await tx.update(schema.purchases).set({ status: after.every(l => l.received >= l.qty - 1e-9) ? 'received' : 'part' }).where(eq(schema.purchases.id, p.id));
-    return ids;
+    return { touched: ids, total: rec.totalPaise };
   });
   await syncSoldOut(venueId, touched);
-  await audit(s, { action: 'goods_received', entity: 'purchase', entityId: p.id, venueId, after: { number: p.number, billNo: b.billNo, supplier: sup?.name } });
+  await audit(s, { action: 'goods_received', entity: 'purchase', entityId: p.id, venueId, after: { number: p.number, billNo: b.billNo, supplier: sup?.name, totalPaise: total } });
   return (await purchaseList(venueId)).find(x => x.id === p.id)!;
 }
 /** Cancel an order nothing arrived for, or close one where the rest isn’t coming. */

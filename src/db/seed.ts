@@ -1,5 +1,5 @@
 // Demo data: four sample vendors, one per venue type, each with its own brand, menu, stations, staff logins,
-// coupons and ~2 weeks of past orders (note "[demo]"). They are flagged isDemo: marked "Demo" everywhere,
+// coupons and ~2 weeks of past orders. They are flagged isDemo: marked "Demo" everywhere,
 // left out of platform totals and never billed.
 // - On this PC (demo mode) they are created on first start, with a super admin and sample leads; PIN 1234.
 // - On the live site the super admin creates / refreshes / removes them from Admin → Demo, with a 6-digit PIN.
@@ -395,7 +395,7 @@ async function sampleOrders(venue: typeof schema.venues.$inferSelect, itemRows: 
           payments: [{ method: payMethod, amountPaise: t.total }], externalRef: channel === 'zomato' ? ref : null,
           fulfilment: channel === 'zomato' ? 'delivery' : venue.serviceMode === 'seat_delivery' ? 'seat' : tables ? 'table' : 'pickup',
           spotLabel: channel === 'zomato' ? `Zomato #${ref}` : spot ? label(spot) : 'Takeaway',
-          subtotalPaise: subtotal, taxPaise: tax, roundOffPaise: t.roundOff, totalPaise: t.total, note: '[demo]',
+          subtotalPaise: subtotal, taxPaise: tax, roundOffPaise: t.roundOff, totalPaise: t.total, note: '',
           timeline: [{ status: 'confirmed', at: created.toISOString() }, { status: 'ready', at: new Date(done.getTime() - 120e3).toISOString() }, { status: 'delivered', at: done.toISOString() }],
           createdAt: created,
         },

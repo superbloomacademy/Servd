@@ -84,8 +84,6 @@ export function Pos({ venue, live, role, presetSpot, clearPreset, reload }: {
   const loadMenu = useCallback(async () => {
     try {
       const [m, st] = await Promise.all([api<MenuData>(`/api/staff/v/${venue.id}/menu`), api(`/api/staff/v/${venue.id}/settings`)]);
-      const order = new Map(m.categories.map((c, i) => [c.id, i]));
-      m.items.sort((a, b) => (order.get(a.categoryId) ?? 99) - (order.get(b.categoryId) ?? 99) || a.sort - b.sort || a.name.localeCompare(b.name));
       setMenu(m); setTax({ bps: st.venue.taxBps, roundOff: !!st.venue.settings?.roundOff }); setFailed('');
     } catch (e) { setFailed((e as Error).message); }
   }, [venue.id]);

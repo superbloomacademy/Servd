@@ -16,6 +16,9 @@ export const GET = route<{ venueId: string }>(async (_req, { venueId }) => {
     db().select().from(schema.items).where(eq(schema.items.venueId, venueId)).orderBy(asc(schema.items.sort)),
     db().select().from(schema.stations).where(eq(schema.stations.venueId, venueId)).orderBy(asc(schema.stations.sort)),
   ]);
+  // Menu order everywhere: by category, then as arranged inside it.
+  const at = new Map(categories.map((c, i) => [c.id, i]));
+  items.sort((a, b) => (at.get(a.categoryId) ?? 999) - (at.get(b.categoryId) ?? 999) || a.sort - b.sort || a.name.localeCompare(b.name));
   return { categories, items, stations };
 });
 

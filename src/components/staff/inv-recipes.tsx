@@ -78,7 +78,7 @@ export function Batches({ inv, post, onNew }: { inv: Inv; post: Post; onNew: () 
   const lines = (m: Mat) => inv.prepLines.filter(l => l.prepId === m.id);
   return (
     <>
-      <div className="mb-3 flex items-center justify-between gap-3"><p className="text-sm text-muted">Things you make ahead, like gravy, dough and chutney. Record each batch: its ingredients go out of stock and it comes in at their cost.</p><Btn tone="outline" onClick={onNew}><Plus size={16} />Kitchen-made item</Btn></div>
+      <div className="mb-3 flex items-center justify-between gap-3"><p className="text-sm text-muted">Things you make ahead, like gravy, dough and chutney. Record each batch: its ingredients go out of stock and it comes in at their cost.</p><Btn tone="outline" className="shrink-0 whitespace-nowrap" onClick={onNew}><Plus size={16} />Kitchen-made item</Btn></div>
       {preps.length ? <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{preps.map(m => { const ls = lines(m); return (
         <li key={m.id} className="rounded-2xl bg-white p-4">
           <div className="flex items-start justify-between gap-2"><div><b>{m.name}</b><p className="text-xs text-muted">{m.avgCost ? `${money(m.avgCost)} / ${m.unit}` : 'No cost yet'}{m.shelfDays ? ` · keeps ${m.shelfDays} day${m.shelfDays === 1 ? '' : 's'}` : ''}</p></div><span className={`tabular text-lg font-extrabold ${m.qty < 0 ? 'text-bad' : ''}`}>{qtyText(m.qty, m.unit)}</span></div>

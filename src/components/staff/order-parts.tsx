@@ -77,7 +77,7 @@ export function OrderCard({ o, flash, children, stationId }: { o: Order; flash?:
           <p className="tabular text-[22px] leading-none font-extrabold">KOT {o.kotNo}</p>
           <p className="mt-1 text-sm font-semibold text-ink-2">{o.spotLabel}</p>
         </div>
-        <div className="flex flex-col items-end gap-1"><Age ts={placed} /><span className="tabular text-xs text-muted">{clock(o.createdAt)}</span></div>
+        <div className="flex flex-col items-end gap-1">{!['delivered', 'cancelled', 'rejected'].includes(o.status) && <Age ts={placed} />}<span className="tabular text-xs text-muted">{clock(o.createdAt)}</span></div>
       </div>
       <div className="mt-2 flex flex-wrap gap-1.5">
         <PayChip o={o} />
