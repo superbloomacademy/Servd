@@ -64,6 +64,13 @@
       "when": 1795349536430,
       "tag": "0008_accept_first_order",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1795349983726,
+      "tag": "0009_inventory_v2",
+      "breakpoints": true
     }
   ]
 }

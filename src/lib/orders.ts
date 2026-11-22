@@ -56,12 +56,12 @@ export async function priceCart(venue: Venue, lines: CartLine[]) {
     }
     // Add-ons: each group's min/max is checked.
     const picked = [...new Set((l.addonIds || []).map(String))];
-    const addons: { name: string; pricePaise: number }[] = [];
+    const addons: { id: string; name: string; pricePaise: number }[] = [];
     for (const g of r.item.addonGroups) {
       const chosen = g.options.filter(o => picked.includes(o.id));
       if (chosen.length < g.min) throw bad(`Choose at least ${g.min} in “${g.name}” for ${r.item.name}.`, 'CHOOSE_ADDON');
       if (g.max && chosen.length > g.max) throw bad(`Choose at most ${g.max} in “${g.name}” for ${r.item.name}.`, 'CHOOSE_ADDON');
-      addons.push(...chosen.map(o => ({ name: o.name, pricePaise: o.pricePaise })));
+      addons.push(...chosen.map(o => ({ id: o.id, name: o.name, pricePaise: o.pricePaise })));
     }
     const unit = (variant ? variant.pricePaise : r.item.pricePaise) + addons.reduce((a, x) => a + x.pricePaise, 0);
     out.push({

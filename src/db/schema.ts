@@ -181,6 +181,9 @@ export const items = pgTable('items', {
   veg: boolean('veg').notNull().default(true),
   imageUrl: text('image_url'),
   isLive: boolean('is_live').notNull().default(true),
+  stockOff: boolean('stock_off').notNull().default(false),   // switched off by the system because a material ran out
+  shortCode: text('short_code').notNull().default(''),       // fast typing on the billing screen: "BC" or "12"
+  favourite: boolean('favourite').notNull().default(false),
   tags: text('tags').array().notNull().default([]),   // bestseller | new | spicy | must_try
   // Sizes like Half / Full, each with its own price. Empty = one price (pricePaise).
   variants: jsonb('variants').$type<ItemVariant[]>().notNull().default([]),
@@ -334,7 +337,7 @@ export const orderItems = pgTable('order_items', {
   veg: boolean('veg').notNull(),
   variantId: text('variant_id'),
   variantName: text('variant_name'),
-  addons: jsonb('addons').$type<{ name: string; pricePaise: number }[]>().notNull().default([]),
+  addons: jsonb('addons').$type<{ id?: string; name: string; pricePaise: number }[]>().notNull().default([]),
   note: text('note').notNull().default(''),     // "less spicy", printed on the KOT
 }, t => [index('oi_order_idx').on(t.orderId)]);
 
@@ -514,6 +517,17 @@ export const stockItems = pgTable('stock_items', {
   qty: doublePrecision('qty').notNull().default(0),   // stock on hand
   lowLevel: doublePrecision('low_level').notNull().default(0),
   costPaise: integer('cost_paise').notNull().default(0),   // last purchase cost per unit
+  avgCost: doublePrecision('avg_cost').notNull().default(0),   // weighted average cost per unit, in paise (not rounded)
+  kind: text('kind').$type<'raw' | 'prep'>().notNull().default('raw'),   // prep = made in the kitchen (gravy, dough, batter)
+  category: text('category').notNull().default(''),
+  buyUnit: text('buy_unit').notNull().default(''),         // how it is bought: "box", "sack". Empty = same as unit
+  buyFactor: doublePrecision('buy_factor').notNull().default(1),   // 1 buyUnit = buyFactor x unit
+  yieldPct: doublePrecision('yield_pct').notNull().default(100),   // usable part after cleaning / peeling
+  batchQty: doublePrecision('batch_qty').notNull().default(0),     // prep only: how much one batch of its recipe makes
+  reorderQty: doublePrecision('reorder_qty').notNull().default(0), // how much to order when low
+  shelfDays: integer('shelf_days').notNull().default(0),           // 0 = no expiry tracking
+  supplierId: uuid('supplier_id'),                                 // usual supplier
+  autoOff: boolean('auto_off').notNull().default(false),           // switch its dishes off when it runs out
   active: boolean('active').notNull().default(true),
   createdAt: created(),
 }, t => [index('stock_items_venue_idx').on(t.venueId)]);
@@ -524,16 +538,127 @@ export const recipes = pgTable('recipes', {
   venueId: uuid('venue_id').notNull().references(() => venues.id, { onDelete: 'cascade' }),
   itemId: uuid('item_id').notNull().references(() => items.id, { onDelete: 'cascade' }),
   variantId: text('variant_id'),
+  addonId: text('addon_id'),                  // set = this line belongs to one add-on ("Extra cheese"), not to the dish itself
   stockItemId: uuid('stock_item_id').notNull().references(() => stockItems.id, { onDelete: 'cascade' }),
-  qty: doublePrecision('qty').notNull(),
+  qty: doublePrecision('qty').notNull(),      // usable quantity in the material's unit (yield is applied when stock goes down)
 }, t => [index('recipes_item_idx').on(t.itemId)]);
 
+// What one batch of a prepared item is made from.
+export const prepLines = pgTable('prep_lines', {
+  id: id(),
+  venueId: uuid('venue_id').notNull().references(() => venues.id, { onDelete: 'cascade' }),
+  prepId: uuid('prep_id').notNull().references(() => stockItems.id, { onDelete: 'cascade' }),
+  stockItemId: uuid('stock_item_id').notNull().references(() => stockItems.id, { onDelete: 'cascade' }),
+  qty: doublePrecision('qty').notNull(),
+}, t => [index('prep_lines_idx').on(t.prepId)]);
+
+export const suppliers = pgTable('suppliers', {
+  id: id(),
+  venueId: uuid('venue_id').notNull().references(() => venues.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  phone: text('phone').notNull().default(''),
+  gstin: text('gstin').notNull().default(''),
+  notes: text('notes').notNull().default(''),
+  active: boolean('active').notNull().default(true),
+  createdAt: created(),
+}, t => [index('suppliers_venue_idx').on(t.venueId)]);
+
+// A purchase: an order to a supplier (or a bill entered directly), received in one or more deliveries.
+export const purchases = pgTable('purchases', {
+  id: id(),
+  venueId: uuid('venue_id').notNull().references(() => venues.id, { onDelete: 'cascade' }),
+  supplierId: uuid('supplier_id').references(() => suppliers.id, { onDelete: 'set null' }),
+  number: integer('number').notNull(),
+  status: text('status').$type<'ordered' | 'part' | 'received' | 'cancelled'>().notNull().default('ordered'),
+  expectedOn: text('expected_on'),             // YYYY-MM-DD
+  note: text('note').notNull().default(''),
+  createdBy: text('created_by').notNull().default(''),
+  createdAt: created(),
+}, t => [uniqueIndex('purchases_no_uq').on(t.venueId, t.number)]);
+export const purchaseLines = pgTable('purchase_lines', {
+  id: id(),
+  purchaseId: uuid('purchase_id').notNull().references(() => purchases.id, { onDelete: 'cascade' }),
+  stockItemId: uuid('stock_item_id').notNull().references(() => stockItems.id, { onDelete: 'cascade' }),
+  unit: text('unit').notNull(),                // the unit it was ordered in
+  factor: doublePrecision('factor').notNull(), // x stock unit
+  qty: doublePrecision('qty').notNull(),       // ordered
+  received: doublePrecision('received').notNull().default(0),
+  ratePaise: doublePrecision('rate_paise').notNull().default(0),   // per ordered unit, before tax
+  taxBps: integer('tax_bps').notNull().default(0),
+}, t => [index('purchase_lines_idx').on(t.purchaseId)]);
+// One delivery against a purchase = one supplier bill.
+export const receipts = pgTable('receipts', {
+  id: id(),
+  venueId: uuid('venue_id').notNull().references(() => venues.id, { onDelete: 'cascade' }),
+  purchaseId: uuid('purchase_id').notNull().references(() => purchases.id, { onDelete: 'cascade' }),
+  supplierId: uuid('supplier_id').references(() => suppliers.id, { onDelete: 'set null' }),
+  billNo: text('bill_no').notNull().default(''),
+  billDate: text('bill_date').notNull(),
+  subtotalPaise: integer('subtotal_paise').notNull(),
+  taxPaise: integer('tax_paise').notNull(),
+  totalPaise: integer('total_paise').notNull(),
+  lines: jsonb('lines').$type<{ stockItemId: string; name: string; qty: number; unit: string; ratePaise: number; taxBps: number; expiry: string | null }[]>().notNull().default([]),
+  by: text('by').notNull().default(''),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [index('receipts_venue_idx').on(t.venueId, t.at)]);
+export const supplierPayments = pgTable('supplier_payments', {
+  id: id(),
+  venueId: uuid('venue_id').notNull().references(() => venues.id, { onDelete: 'cascade' }),
+  supplierId: uuid('supplier_id').notNull().references(() => suppliers.id, { onDelete: 'cascade' }),
+  amountPaise: integer('amount_paise').notNull(),
+  method: text('method').$type<'cash' | 'upi' | 'bank' | 'card'>().notNull(),
+  fromDrawer: boolean('from_drawer').notNull().default(false),
+  note: text('note').notNull().default(''),
+  by: text('by').notNull().default(''),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [index('supplier_payments_idx').on(t.venueId, t.supplierId)]);
+
+// Deliveries of materials that expire. What is left of each is worked out from the stock on hand (oldest used first).
+export const stockBatches = pgTable('stock_batches', {
+  id: id(),
+  venueId: uuid('venue_id').notNull().references(() => venues.id, { onDelete: 'cascade' }),
+  stockItemId: uuid('stock_item_id').notNull().references(() => stockItems.id, { onDelete: 'cascade' }),
+  qty: doublePrecision('qty').notNull(),
+  expiry: text('expiry').notNull(),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+}, t => [index('stock_batches_idx').on(t.stockItemId)]);
+
+// A full physical count. Expected is frozen when the count is finished; the difference is the variance.
+export const stockCounts = pgTable('stock_counts', {
+  id: id(),
+  venueId: uuid('venue_id').notNull().references(() => venues.id, { onDelete: 'cascade' }),
+  note: text('note').notNull().default(''),
+  by: text('by').notNull(),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  lines: jsonb('lines').$type<{ stockItemId: string; name: string; unit: string; expected: number; counted: number; cost: number }[]>().notNull(),
+  shortPaise: integer('short_paise').notNull(),
+  extraPaise: integer('extra_paise').notNull(),
+}, t => [index('stock_counts_idx').on(t.venueId, t.at)]);
+
+// Stock sent from one branch to another of the same owner.
+export const stockTransfers = pgTable('stock_transfers', {
+  id: id(),
+  vendorId: uuid('vendor_id').notNull().references(() => vendors.id, { onDelete: 'cascade' }),
+  fromVenueId: uuid('from_venue_id').notNull().references(() => venues.id, { onDelete: 'cascade' }),
+  toVenueId: uuid('to_venue_id').notNull().references(() => venues.id, { onDelete: 'cascade' }),
+  status: text('status').$type<'sent' | 'received' | 'cancelled'>().notNull().default('sent'),
+  lines: jsonb('lines').$type<{ stockItemId: string; name: string; unit: string; qty: number; received?: number; cost: number }[]>().notNull(),
+  note: text('note').notNull().default(''),
+  sentBy: text('sent_by').notNull(),
+  receivedBy: text('received_by'),
+  at: timestamp('at', { withTimezone: true }).notNull().defaultNow(),
+  receivedAt: timestamp('received_at', { withTimezone: true }),
+}, t => [index('stock_transfers_from').on(t.fromVenueId), index('stock_transfers_to').on(t.toVenueId)]);
+
+export type StockMoveKind = 'purchase' | 'sale' | 'return' | 'wastage' | 'adjust' | 'count' | 'made' | 'used' | 'sent' | 'arrived';
 // Every stock change: purchase (+), sale (−), sale reversed (+), wastage (−), count adjustment (±).
 export const stockMoves = pgTable('stock_moves', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
   venueId: uuid('venue_id').notNull().references(() => venues.id, { onDelete: 'cascade' }),
   stockItemId: uuid('stock_item_id').notNull().references(() => stockItems.id, { onDelete: 'cascade' }),
-  kind: text('kind').$type<'purchase' | 'sale' | 'return' | 'wastage' | 'adjust'>().notNull(),
+  kind: text('kind').$type<StockMoveKind>().notNull(),
+  unitCost: doublePrecision('unit_cost').notNull().default(0),   // average cost per unit (paise) at that moment
+  refId: uuid('ref_id'),                              // receipt, count, transfer or production it came from
   qty: doublePrecision('qty').notNull(),                 // signed
   costPaise: integer('cost_paise').notNull().default(0),   // purchases: total paid
   orderId: uuid('order_id'),

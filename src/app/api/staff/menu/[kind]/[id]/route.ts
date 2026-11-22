@@ -29,7 +29,7 @@ export const PATCH = route<{ kind: string; id: string }>(async (req, { kind, id 
     if (!own) throw forbidden('You can switch off only your own station’s items.');
   }
   const set: Record<string, unknown> = {};
-  if ('isLive' in b) set.isLive = !!b.isLive;
+  if ('isLive' in b) { set.isLive = !!b.isLive; if (kind === 'item') set.stockOff = false; }
   if (!onlyLive) {
     for (const k of ['name', 'description', 'imageUrl']) if (k in b) set[k] = b[k] === null ? null : String(b[k]).slice(0, 300);
     if ('name' in set && String(set.name).trim().length < 2) throw bad('Name is too short');

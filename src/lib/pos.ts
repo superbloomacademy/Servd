@@ -202,7 +202,7 @@ export async function cancelItem(orderItemId: string, qty: number, reason: strin
   const ks = await db().select().from(schema.kots).where(eq(schema.kots.orderId, o.id));
   for (const k of ks) if (!stations.has(k.stationId ?? null) && k.status !== 'ready') await db().delete(schema.kots).where(eq(schema.kots.id, k.id));
 
-  await returnLineStock(o.venueId, o.id, { itemId: it.itemId, variantId: it.variantId, qty: q }, s.name);
+  await returnLineStock(o.venueId, o.id, { itemId: it.itemId, variantId: it.variantId, qty: q, addons: it.addons }, s.name);
   await audit(s, { action: 'item_cancelled', entity: 'order', entityId: o.id, venueId: o.venueId,
     after: { kotNo: o.kotNo, spot: o.spotLabel, name: it.name, qty: q, amountPaise: q * it.pricePaise, reason: reason.trim().slice(0, 200) } });
   if (o.tableSessionId) await broadcastTable(o.tableSessionId);

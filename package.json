@@ -17,7 +17,8 @@
     "test:pos": "tsx tests/pos.ts",
     "test:scroll": "node tests/scroll-audit.mjs",
     "test:demo": "tsx tests/demo.ts",
-    "test:ux": "node tests/ux.mjs"
+    "test:ux": "node tests/ux.mjs",
+    "test:inv": "tsx tests/inventory.ts"
   },
   "dependencies": {
     "cross-env": "7.0.3",

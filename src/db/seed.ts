@@ -265,8 +265,8 @@ async function demoExtras(venue: typeof schema.venues.$inferSelect, itemRows: (t
   const mats = async (list: [string, string, number, number, number][]) => {
     const out: Record<string, string> = {};
     for (const [name, unit, qty, low, cost] of list) {
-      const [m] = await d.insert(schema.stockItems).values({ venueId: venue.id, name, unit, qty, lowLevel: low, costPaise: cost * 100 }).returning();
-      await d.insert(schema.stockMoves).values({ venueId: venue.id, stockItemId: m.id, kind: 'adjust', qty, note: 'Opening stock', staffName: 'Setup' });
+      const [m] = await d.insert(schema.stockItems).values({ venueId: venue.id, name, unit, qty, lowLevel: low, costPaise: cost * 100, avgCost: cost * 100 }).returning();
+      await d.insert(schema.stockMoves).values({ venueId: venue.id, stockItemId: m.id, kind: 'adjust', qty, unitCost: cost * 100, note: 'Opening stock', staffName: 'Setup' });
       out[name] = m.id;
     }
     return out;
