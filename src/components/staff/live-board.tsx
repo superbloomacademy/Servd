@@ -7,7 +7,7 @@ import { useToast } from '@/components/ui/providers';
 import { OrderButtons, OrderCard, useOrderActions } from './order-parts';
 import { PaySheet } from './pay-sheet';
 import { PageHead } from './shell';
-import type { Live, Order, Role, VenueCtx } from './types';
+import { needsAccept, type Live, type Order, type Role, type VenueCtx } from './types';
 
 const CAN: Record<string, Role[]> = {
   pay: ['owner', 'manager', 'cashier', 'captain'], cook: ['owner', 'manager', 'cashier', 'station'],
@@ -33,8 +33,8 @@ export function LiveBoard({ venue, live, role, flash, reload }: { venue: VenueCt
   const cols = useMemo(() => {
     const by = (f: (o: Order) => boolean) => live.orders.filter(f);
     const c = [
-      { key: 'pay', title: 'Payment to confirm', hint: 'Check soundbox / bank, then confirm', list: by(o => o.status === 'awaiting_payment').sort((a, b) => Number(b.payStatus === 'claimed') - Number(a.payStatus === 'claimed') || +new Date(a.createdAt) - +new Date(b.createdAt)) },
-      { key: 'kitchen', title: 'In the kitchen', hint: 'Confirmed and being prepared', list: by(o => ['confirmed', 'preparing'].includes(o.status)).sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt)) },
+      { key: 'pay', title: venue.serviceMode === 'table_bill' ? 'Needs you' : 'Payment to confirm', hint: venue.serviceMode === 'table_bill' ? 'Accept new tables, confirm payments' : 'Check soundbox / bank, then confirm', list: by(o => o.status === 'awaiting_payment' || needsAccept(o)).sort((a, b) => Number(b.payStatus === 'claimed') - Number(a.payStatus === 'claimed') || +new Date(a.createdAt) - +new Date(b.createdAt)) },
+      { key: 'kitchen', title: 'In the kitchen', hint: 'Confirmed and being prepared', list: by(o => ['confirmed', 'preparing'].includes(o.status) && !needsAccept(o)).sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt)) },
       { key: 'ready', title: seat ? 'Ready to deliver' : 'Ready', hint: seat ? 'Runner picks up' : 'Hand over / serve', list: by(o => o.status === 'ready') },
       ...(seat ? [{ key: 'out', title: 'On the way', hint: 'Walking to the seat', list: by(o => o.status === 'out') }] : []),
       { key: 'done', title: 'Done today', hint: 'Last 12 hours', list: by(o => ['delivered', 'cancelled', 'rejected'].includes(o.status)).slice(0, 25) },

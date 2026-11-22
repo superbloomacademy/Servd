@@ -252,6 +252,7 @@ export function MenuApp({ code }: { code: string }) {
 }
 
 function statusLine(o: OrderView) {
+  if (o.awaitingStaff) return 'Waiting for the staff to accept';
   if (o.status === 'awaiting_payment') return o.payMethod === 'cash' ? `Pay ${rupee(o.totalPaise)} at the counter` : o.payStatus === 'claimed' ? 'Waiting for payment confirmation' : `Pay ${rupee(o.totalPaise)} to confirm`;
   return ({ confirmed: 'Order confirmed', preparing: 'Being prepared', ready: o.fulfilment === 'pickup' ? 'Ready, collect at the counter' : 'Ready', out: 'On the way to you' } as Record<string, string>)[o.status] || 'In progress';
 }

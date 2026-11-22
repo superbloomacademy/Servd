@@ -272,6 +272,7 @@ async function main() {
   const go = await g.post('/api/orders', { visitId: sc.json.visit.id, lines: [{ itemId: gm.id, qty: 1, variantId: 'full', addonIds: ['raita'] }] });
   check('guest places the order', go.json?.order?.items?.[0]?.name === 'Chicken Dum Biryani (Full) + Extra raita', go.json);
   const ts4 = go.json?.order?.tableSessionId;
+  check('captain accepts the table’s first QR order', (await captain.post(`/api/staff/orders/${go.json?.order?.id}`, { action: 'accept' })).status === 200);
   const due4 = (await live()).tables.find((t: any) => t.session.id === ts4)?.duePaise;
   check('settle the guest’s table', (await cashier.post(`/api/staff/tables/${ts4}`, { action: 'close', payments: [{ method: 'upi_shop', amountPaise: due4 }] })).status === 200);
 

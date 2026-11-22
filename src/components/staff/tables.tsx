@@ -7,7 +7,8 @@ import { useConfirm, useToast } from '@/components/ui/providers';
 import { PageHead } from './shell';
 import { PaySheet } from './pay-sheet';
 import { CancelItemSheet, DiscountSheet, Stepper } from './pos-parts';
-import { CHANNEL_LABEL, type Live, type Role, type TableBill, type VenueCtx } from './types';
+import { useOrderActions } from './order-parts';
+import { CHANNEL_LABEL, needsAccept, type Live, type Role, type TableBill, type VenueCtx } from './types';
 
 export type Spot = { id: string; label: string; kind: string; areaId: string | null; active: boolean };
 type Area = { id: string; name: string };
@@ -61,7 +62,7 @@ export function Tables({ venue, live, role, reload, onOrder }: { venue: VenueCtx
 
       <div className="mb-4 flex flex-wrap gap-3 text-xs text-muted">
         <Legend cls="border-line bg-white" label="Free" /><Legend cls="border-[#BFD3F7] bg-[#F3F7FF]" label="Seated" />
-        <Legend cls="border-[#F5D7A9] bg-[#FFF8EC]" label="Running" /><Legend cls="border-brand bg-brand-soft" label="Bill asked" /><Legend cls="border-good bg-[#E7F6EF]" label="Says paid" />
+        <Legend cls="border-bad bg-[#FDECEE]" label="Accept first order" /><Legend cls="border-[#F5D7A9] bg-[#FFF8EC]" label="Running" /><Legend cls="border-brand bg-brand-soft" label="Bill asked" /><Legend cls="border-good bg-[#E7F6EF]" label="Says paid" />
       </div>
 
       {groups.map(g => (
@@ -70,8 +71,8 @@ export function Tables({ venue, live, role, reload, onOrder }: { venue: VenueCtx
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
             {g.list.map(s => {
               const b = billFor(s.id), reqs = reqFor(s.id);
-              const state = !b ? 'free' : b.session.status === 'bill_requested' ? (b.session.payStatus === 'claimed' ? 'paid?' : 'bill') : b.rounds.length ? 'eating' : 'seated';
-              const style = { free: 'border-line bg-white', seated: 'border-[#BFD3F7] bg-[#F3F7FF]', eating: 'border-[#F5D7A9] bg-[#FFF8EC]', bill: 'border-brand bg-brand-soft', 'paid?': 'border-good bg-[#E7F6EF]' }[state];
+              const state = !b ? 'free' : b.rounds.some(r => r.awaitingStaff) ? 'accept' : b.session.status === 'bill_requested' ? (b.session.payStatus === 'claimed' ? 'paid?' : 'bill') : b.rounds.length ? 'eating' : 'seated';
+              const style = { free: 'border-line bg-white', seated: 'border-[#BFD3F7] bg-[#F3F7FF]', accept: 'border-bad bg-[#FDECEE]', eating: 'border-[#F5D7A9] bg-[#FFF8EC]', bill: 'border-brand bg-brand-soft', 'paid?': 'border-good bg-[#E7F6EF]' }[state];
               const mins = b ? minsSince(b.session.openedAt) : 0;
               return (
                 <button key={s.id} onClick={() => (b ? setOpen(b.session.id) : onOrder(s.id))}
@@ -82,7 +83,7 @@ export function Tables({ venue, live, role, reload, onOrder }: { venue: VenueCtx
                   {state === 'free' ? <span className="mt-auto flex items-center gap-1 text-xs font-semibold text-muted"><Plus size={13} />New order</span> : (
                     <>
                       <span className="mt-auto text-xs font-semibold text-ink-2">
-                        {state === 'seated' ? 'Seated · no order yet' : state === 'bill' ? 'Bill requested' : state === 'paid?' ? 'Says paid, confirm' : `${b!.rounds.length} KOT${b!.rounds.length === 1 ? '' : 's'}`}
+                        {state === 'accept' ? 'First QR order · accept' : state === 'seated' ? 'Seated · no order yet' : state === 'bill' ? 'Bill requested' : state === 'paid?' ? 'Says paid, confirm' : `${b!.rounds.length} KOT${b!.rounds.length === 1 ? '' : 's'}`}
                       </span>
                       {b!.duePaise > 0 && <span className="tabular text-base font-extrabold">{rupee(b!.duePaise)}</span>}
                       <span className={`text-[11px] ${mins >= 90 ? 'font-semibold text-bad' : 'text-muted'}`}>{dur(mins)} · since {clock(b!.session.openedAt)}</span>
@@ -122,6 +123,7 @@ export function TableBillSheet({ bill, live, spots, role, onClose, reload, onAdd
   const [disc, setDisc] = useState(false);
   const [pick, setPick] = useState<'move' | 'merge' | null>(null);
   const [cancel, setCancel] = useState<{ id: string; name: string; qty: number; pricePaise: number } | null>(null);
+  const actions = useOrderActions(reload);
   const can = SETTLE.includes(role);
   const canFix = DISCOUNT.includes(role);
   if (!bill) return null;
@@ -133,6 +135,7 @@ export function TableBillSheet({ bill, live, spots, role, onClose, reload, onAdd
   const anyDiscount = bill.rounds.find(r => r.discountReason && r.payStatus === 'on_bill');
   const unpaidRounds = bill.rounds.filter(r => r.payStatus === 'on_bill');
   const empty = !bill.rounds.length;
+  const toAccept = live.orders.find(o => o.tableSessionId === sid && needsAccept(o));
   const free = spots.filter(s => s.id !== bill.session.spotId && !live.tables.some(t => t.session.spotId === s.id));
   const others = live.tables.filter(t => t.session.id !== sid);
 
@@ -142,6 +145,13 @@ export function TableBillSheet({ bill, live, spots, role, onClose, reload, onAdd
         title={<span className="flex items-center gap-3">{bill.spotLabel}<Pill tone={bill.session.status === 'bill_requested' ? 'brand' : 'neutral'}>{bill.session.status === 'bill_requested' ? 'Bill requested' : 'Running'}</Pill></span>}
         footer={
           <div className="space-y-2">
+            {toAccept && (
+              <div className="flex flex-wrap items-center gap-2 rounded-xl bg-[#FDECEE] px-3 py-2.5 text-sm text-[#B42334]">
+                <span className="min-w-40 flex-1"><b>First QR order.</b> The kitchen gets it after you accept.</span>
+                <Btn size="sm" tone="good" onClick={() => actions.accept(toAccept)}>Accept</Btn>
+                <Btn size="sm" tone="danger" onClick={() => actions.reject(toAccept)}>Decline</Btn>
+              </div>
+            )}
             {bill.session.payStatus === 'claimed' && <p className="rounded-xl bg-[#E7F6EF] px-3 py-2 text-sm text-[#11734E]">Guest says they paid by UPI{bill.session.utrLast4 ? ` · ref ends ${bill.session.utrLast4}` : ''}. Check the soundbox or bank app, then settle.</p>}
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {onAddItems && <Btn tone="outline" onClick={() => onAddItems(bill.session.spotId)}><Plus size={16} />Add items</Btn>}

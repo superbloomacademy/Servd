@@ -8,7 +8,7 @@ import { api, store, useRealtime } from '@/lib/client';
 import { brandVars } from '@/lib/theme';
 import { Spinner } from '@/components/ui/kit';
 import { useConfirm, useToast } from '@/components/ui/providers';
-import type { Live, Me, Order, Role, VenueCtx } from './types';
+import { needsAccept, type Live, type Me, type Order, type Role, type VenueCtx } from './types';
 import { LiveBoard } from './live-board';
 import { Kitchen } from './kitchen';
 import { Tables } from './tables';
@@ -124,7 +124,7 @@ export function StaffShell() {
         setFlash(f => new Set(f).add(m.order.id));
         setTimeout(() => setFlash(f => { const n = new Set(f); n.delete(m.order.id); return n; }), 8000);
         if (sound) chime(m.kind === 'payment_claim' ? 2 : 1);
-        toast(m.kind === 'payment_claim' ? `KOT ${m.order.kotNo}: customer says they paid. Check and confirm.` : `New order · KOT ${m.order.kotNo} · ${m.order.spotLabel}`);
+        toast(m.kind === 'payment_claim' ? `KOT ${m.order.kotNo}: customer says they paid. Check and confirm.` : needsAccept(m.order) ? `${m.order.spotLabel}: first QR order. Check the table and accept it.` : `New order · KOT ${m.order.kotNo} · ${m.order.spotLabel}`);
       }
     },
     table: () => soon(),
@@ -147,7 +147,7 @@ export function StaffShell() {
     catch (e) { toast((e as Error).message, 'bad'); }
   };
   const logout = async () => { await api('/api/staff/logout', { body: {} }); router.replace('/staff/login'); };
-  const pending = live.orders.filter(o => o.status === 'awaiting_payment' && o.payStatus !== 'unpaid').length + live.requests.length;
+  const pending = live.orders.filter(o => (o.status === 'awaiting_payment' && o.payStatus !== 'unpaid') || needsAccept(o)).length + live.requests.length;
   const v = me.venues.find(x => x.id === venue.id)!;
 
   return (

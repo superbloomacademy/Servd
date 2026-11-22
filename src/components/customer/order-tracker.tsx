@@ -57,6 +57,7 @@ export function OrderTracker({ id }: { id: string }) {
   const steps: { key: string; label: string; done: boolean; time?: string }[] = [
     { key: 'placed', label: 'Order placed', done: true, time: o.createdAt },
     ...(o.payMethod !== 'bill' ? [{ key: 'paid', label: o.payMethod === 'cash' ? 'Cash received' : 'Payment confirmed', done: o.payStatus === 'paid', time: at('paid') }] : []),
+    ...(o.awaitingStaff || at('accepted') ? [{ key: 'accepted', label: 'Accepted by the staff', done: !o.awaitingStaff, time: at('accepted') }] : []),
     { key: 'preparing', label: 'Being prepared', done: ['preparing', 'ready', 'out', 'delivered'].includes(o.status), time: at('preparing') },
     { key: 'ready', label: pickup ? 'Ready at the counter' : 'Ready', done: ['ready', 'out', 'delivered'].includes(o.status), time: at('ready') },
     ...(o.fulfilment === 'seat' ? [{ key: 'out', label: 'On the way to your seat', done: ['out', 'delivered'].includes(o.status), time: at('out') }] : []),
@@ -65,6 +66,7 @@ export function OrderTracker({ id }: { id: string }) {
   const current = steps.findIndex(s => !s.done);
 
   const headline = o.status === 'rejected' ? 'Order rejected' : o.status === 'cancelled' ? 'Order cancelled'
+    : o.awaitingStaff ? 'Waiting for the staff'
     : waitingPay ? (o.payMethod === 'cash' ? 'Pay at the counter' : o.payStatus === 'claimed' ? 'Confirming your payment' : 'Complete your payment')
     : o.status === 'ready' && pickup ? 'Ready! Collect it now' : o.status === 'delivered' ? (pickup ? 'Collected. Enjoy!' : 'Served. Enjoy!')
     : o.status === 'out' ? 'On the way to your seat' : o.status === 'ready' ? 'Ready, coming to you' : o.deliverAt === 'interval' && o.releaseAt && new Date(o.releaseAt) > new Date() ? 'Scheduled for the interval' : 'Being prepared';

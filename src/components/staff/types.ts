@@ -16,10 +16,12 @@ export type Order = {
 export type PayMethod = 'upi_shop' | 'cash' | 'bill' | 'card' | 'online' | 'split';
 export type Payment = { method: 'upi_shop' | 'cash' | 'card' | 'online'; amountPaise: number };
 export type Channel = 'qr' | 'pos' | 'zomato' | 'swiggy' | 'phone' | 'other';
+/** A guest's first QR order at a table: staff must accept it before the kitchen gets it. */
+export const needsAccept = (o: Order) => o.payStatus === 'on_bill' && !o.releaseAt && !['cancelled', 'rejected'].includes(o.status) && o.kots.length > 0 && o.kots.every(k => k.status === 'held');
 export type TableBill = {
   session: { id: string; spotId: string; status: 'open' | 'bill_requested' | 'closed'; payStatus: 'unpaid' | 'claimed' | 'paid'; payMethod: PayMethod | null; utrLast4: string | null; openedAt: string; billRequestedAt: string | null; guests: number };
   spotLabel: string; totalPaise: number; subtotalPaise: number; taxPaise: number; discountPaise: number; roundOffPaise: number; duePaise: number;
-  rounds: { id: string; kotNo: number; status: string; createdAt: string; totalPaise: number; payStatus: string; channel: Channel; discountReason: string | null;
+  rounds: { awaitingStaff: boolean; id: string; kotNo: number; status: string; createdAt: string; totalPaise: number; payStatus: string; channel: Channel; discountReason: string | null;
     items: { id: string; name: string; qty: number; pricePaise: number; veg: boolean; note: string }[] }[];
 };
 export type ServiceRequest = { id: string; spotId: string; tableSessionId: string | null; kind: 'waiter' | 'water' | 'bill'; createdAt: string; spotLabel: string };

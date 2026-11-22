@@ -8,7 +8,7 @@ import { useConfirm, useToast } from '@/components/ui/providers';
 import { PageHead } from './shell';
 import type { VenueCtx } from './types';
 
-type Settings = { acceptCash: boolean; unpaidCancelMin: number; startBeforePayment: boolean; rescanMinutes: number; sessionHours: number; pauseLastMin: number; showWindowBeforeMin: number; roundOff?: boolean };
+type Settings = { acceptCash: boolean; unpaidCancelMin: number; startBeforePayment: boolean; rescanMinutes: number; sessionHours: number; pauseLastMin: number; showWindowBeforeMin: number; roundOff?: boolean; approveFirstOrder?: boolean };
 type VenueRow = { id: string; name: string; type: string; serviceMode: string; address: string | null; city: string | null; upiId: string | null; upiName: string | null; upiQrUrl: string | null; taxBps: number; isOpen: boolean; openTime: string; closeTime: string; settings: Settings };
 type Vendor = { id: string; name: string; logoUrl: string | null; brandColor: string; legalName: string | null; gstin: string | null; fssai: string | null; address: string | null; phone: string | null };
 
@@ -124,6 +124,7 @@ export function VenueSettings({ venue, onSaved }: { venue: VenueCtx; onSaved: ()
         </div>
         <div className="mt-4 divide-y divide-line">
           <Row label="Accept cash at the counter" hint={v.serviceMode === 'seat_delivery' ? 'Cash orders are collected at the counter, not delivered to the seat.' : undefined}><Toggle on={s.acceptCash} onChange={() => set({ acceptCash: !s.acceptCash })} label="Accept cash" /></Row>
+          {v.serviceMode === 'table_bill' && <Row label="Staff accept a table’s first QR order" hint="Stops fake orders from a photo of the QR. One tap per table; the next orders go straight to the kitchen."><Toggle on={s.approveFirstOrder !== false} onChange={() => set({ approveFirstOrder: s.approveFirstOrder === false })} label="Accept first order" /></Row>}
           <Row label="Start preparing before payment is confirmed" hint="Only for busy stalls with regular customers. Off is safer."><Toggle on={s.startBeforePayment} onChange={() => set({ startBeforePayment: !s.startBeforePayment })} label="Start before payment" /></Row>
           <Row label="Round bills to the nearest rupee" hint="₹178.50 becomes ₹179, ₹178.40 becomes ₹178. The round-off shows on the bill."><Toggle on={!!s.roundOff} onChange={() => set({ roundOff: !s.roundOff })} label="Round off bills" /></Row>
           <Row label="Cancel unpaid orders after (minutes)"><input className="w-20 rounded-lg border border-line px-2 py-1.5 text-right" inputMode="numeric" value={s.unpaidCancelMin} onChange={e => set({ unpaidCancelMin: Number(e.target.value.replace(/\D/g, '')) || 0 })} /></Row>

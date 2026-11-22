@@ -182,7 +182,9 @@ export async function createOrder(input: {
       subtotalPaise: subtotal, discountPaise: discount, taxPaise: tax, roundOffPaise: roundOff, totalPaise: total, couponCode,
       note: String(input.note || '').slice(0, 200), timeline: [tl(status)],
     }).returning();
-    const releaseNow = (running || venue.settings.startBeforePayment) && deliverAt === 'now';
+    // Running bill: the table's first QR order waits until staff accept it (unless the venue turned that off).
+    const waitForStaff = running && venue.settings.approveFirstOrder !== false && !input.tableSession?.acceptedAt;
+    const releaseNow = (running ? !waitForStaff : venue.settings.startBeforePayment) && deliverAt === 'now';
     await writeLinesAndKots(tx, o.id, venue.id, lines, releaseNow);
     if (running && couponCode) await tx.update(schema.coupons).set({ used: sql`${schema.coupons.used} + 1` })
       .where(and(eq(schema.coupons.vendorId, venue.vendorId), eq(schema.coupons.code, couponCode)));
@@ -224,6 +226,26 @@ export async function getFullOrder(id: string) {
   return (await hydrate([o]))[0];
 }
 
+/** A guest's QR order at a table that staff have not accepted yet: it is on hold and the kitchen has not seen it. */
+export const awaitingStaff = (o: { payStatus: string; status: string; releaseAt: Date | string | null; kots: { status: string }[] }) =>
+  o.payStatus === 'on_bill' && !o.releaseAt && !['cancelled', 'rejected'].includes(o.status) && o.kots.length > 0 && o.kots.every(k => k.status === 'held');
+
+/** Staff accept the table: everything waiting there goes to the kitchen, and its next QR orders go straight through. */
+export async function acceptTable(orderId: string, s: Staff) {
+  const o = await getFullOrder(orderId);
+  if (!o.tableSessionId || !awaitingStaff(o)) throw bad(`KOT ${o.kotNo} is not waiting to be accepted.`);
+  await db().update(schema.tableSessions).set({ acceptedAt: new Date(), acceptedBy: s.name }).where(eq(schema.tableSessions.id, o.tableSessionId));
+  const waiting = (await hydrate(await db().select().from(schema.orders).where(eq(schema.orders.tableSessionId, o.tableSessionId)))).filter(awaitingStaff);
+  for (const w of waiting) {
+    await db().update(schema.orders).set({ timeline: [...w.timeline, tl('accepted', s.name)] }).where(eq(schema.orders.id, w.id));
+    await releaseKots(w.id);
+  }
+  await audit(s, { action: 'table_accepted', entity: 'table_session', entityId: o.tableSessionId, venueId: o.venueId, after: { spot: o.spotLabel, kotNos: waiting.map(w => w.kotNo) } });
+  for (const w of waiting) await broadcastOrder(w.id, 'new');
+  await broadcastTable(o.tableSessionId);
+  return getFullOrder(orderId);
+}
+
 // What the customer sees (no internal staff ids).
 export function customerView(o: FullOrder) {
   return {
@@ -231,7 +253,7 @@ export function customerView(o: FullOrder) {
     fulfilment: o.fulfilment, deliverAt: o.deliverAt, releaseAt: o.releaseAt, showLabel: o.showLabel, spotLabel: o.spotLabel,
     subtotalPaise: o.subtotalPaise, discountPaise: o.discountPaise, taxPaise: o.taxPaise, totalPaise: o.totalPaise,
     couponCode: o.couponCode, note: o.note, rejectReason: o.rejectReason, timeline: o.timeline, createdAt: o.createdAt,
-    tableSessionId: o.tableSessionId, utrLast4: o.utrLast4,
+    tableSessionId: o.tableSessionId, utrLast4: o.utrLast4, awaitingStaff: awaitingStaff(o),
     items: o.items.map(i => ({ name: lineName(i), qty: i.qty, pricePaise: i.pricePaise, veg: i.veg, note: i.note })),
   };
 }
@@ -310,6 +332,7 @@ export async function staffAdvance(orderId: string, to: 'preparing' | 'ready' | 
   const o = (await db().select().from(schema.orders).where(eq(schema.orders.id, orderId)))[0];
   if (!o) throw notFound('Order not found');
   if (['cancelled', 'rejected', 'delivered'].includes(o.status)) throw bad(`Order KOT ${o.kotNo} is already ${o.status}.`);
+  if (awaitingStaff(await getFullOrder(o.id))) throw bad(`Accept KOT ${o.kotNo} first. The kitchen has not received it yet.`);
   if (o.status === 'awaiting_payment' && o.payStatus !== 'on_bill') throw bad(`KOT ${o.kotNo} is not paid yet. Confirm the payment first.`);
   if (to === 'out' && o.fulfilment !== 'seat') throw bad('Only seat-delivery orders go "out".');
   if (to === 'delivered' && o.payStatus === 'unpaid') throw bad(`KOT ${o.kotNo} is not paid yet. Settle the bill first.`);
@@ -353,7 +376,7 @@ export async function tableBill(tableSessionId: string) {
   const spot = (await db().select().from(schema.spots).where(eq(schema.spots.id, ts.spotId)))[0];
   return {
     session: ts, spotLabel: spot ? `Table ${spot.label}` : '',
-    rounds: os.map(o => ({ id: o.id, kotNo: o.kotNo, status: o.status, createdAt: o.createdAt, totalPaise: o.totalPaise, payStatus: o.payStatus,
+    rounds: os.map(o => ({ awaitingStaff: awaitingStaff(o), id: o.id, kotNo: o.kotNo, status: o.status, createdAt: o.createdAt, totalPaise: o.totalPaise, payStatus: o.payStatus,
       channel: o.channel, discountReason: o.discountReason,
       items: o.items.map(i => ({ id: i.id, name: lineName(i), qty: i.qty, pricePaise: i.pricePaise, veg: i.veg, note: i.note })) })),
     subtotalPaise: sum('subtotalPaise'), discountPaise: sum('discountPaise'), taxPaise: sum('taxPaise'), totalPaise: sum('totalPaise'),
@@ -373,6 +396,8 @@ export async function broadcastTable(tableSessionId: string, kind = 'update') {
 export async function closeTable(tableSessionId: string, s: Staff, methodOrPayments: 'upi_shop' | 'cash' | Payment[]) {
   const bill = await tableBill(tableSessionId);
   if (bill.session.status === 'closed' || bill.session.status === 'merged') throw bad('This table is already closed.');
+  const waiting = bill.rounds.filter(r => r.awaitingStaff);
+  if (waiting.length) throw bad(`KOT ${waiting.map(r => r.kotNo).join(', ')} from this table has not been accepted yet. Accept or decline it first.`);
   const payments: Payment[] = Array.isArray(methodOrPayments) ? methodOrPayments : bill.duePaise ? [{ method: methodOrPayments, amountPaise: bill.duePaise }] : [];
   checkPayments(payments, bill.duePaise);
   const method = payMethodOf(payments);

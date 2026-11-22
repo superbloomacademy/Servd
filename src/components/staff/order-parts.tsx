@@ -3,7 +3,7 @@ import { Banknote, Clock, Printer, Smartphone, StickyNote, Clapperboard, Receipt
 import { api, clock, minsSince, rupee } from '@/lib/client';
 import { Btn, Pill, VegMark } from '@/components/ui/kit';
 import { useConfirm, useToast } from '@/components/ui/providers';
-import { CHANNEL_LABEL, PAY_LABEL, type Kot, type Order } from './types';
+import { CHANNEL_LABEL, PAY_LABEL, needsAccept, type Kot, type Order } from './types';
 
 // Every action that changes an order or money asks for confirmation first.
 export function useOrderActions(onDone?: () => void) {
@@ -31,6 +31,10 @@ export function useOrderActions(onDone?: () => void) {
       });
       if (r) await run(() => api(`/api/staff/orders/${o.id}`, { body: { action: 'reject', reason: r.value } }), `KOT ${o.kotNo} rejected`);
     },
+    accept: async (o: Order) => {
+      const yes = await confirm({ title: `Are guests sitting at ${o.spotLabel}?`, body: <>First QR order from this table: <b>{o.items.map(i => `${i.qty} × ${i.name}`).join(', ')}</b>. Accept only if you can see the guests. Their next orders go straight to the kitchen.</>, confirm: 'Yes, send to kitchen', tone: 'primary' });
+      if (yes) await run(() => api(`/api/staff/orders/${o.id}`, { body: { action: 'accept' } }), `${o.spotLabel} accepted, KOT ${o.kotNo} sent to the kitchen`);
+    },
     advance: async (o: Order, to: 'preparing' | 'ready' | 'out' | 'delivered') => {
       if (to === 'delivered' && o.fulfilment === 'pickup') {
         const yes = await confirm({ title: `Hand over KOT ${o.kotNo}?`, body: `Check the customer shows KOT ${o.kotNo} on their phone before you hand it over.`, confirm: 'Handed over', tone: 'primary' });
@@ -45,6 +49,7 @@ export function useOrderActions(onDone?: () => void) {
 
 export function PayChip({ o }: { o: Order }) {
   if (['cancelled', 'rejected'].includes(o.status) && o.payStatus !== 'paid') return null;
+  if (needsAccept(o)) return <Pill tone="warn" className="anim-pop">First QR order · check the table</Pill>;
   if (o.payStatus === 'on_bill') return <Pill tone="info"><ReceiptText size={12} />On table bill</Pill>;
   if (o.payStatus === 'paid') {
     const I = o.payMethod === 'cash' ? Banknote : o.payMethod === 'card' ? CreditCard : o.payMethod === 'online' ? Globe : Smartphone;
@@ -58,7 +63,8 @@ export function PayChip({ o }: { o: Order }) {
 
 export function Age({ ts, warnAt = 12 }: { ts: string; warnAt?: number }) {
   const m = minsSince(ts);
-  return <span className={`tabular inline-flex items-center gap-1 text-xs font-semibold ${m >= warnAt ? 'text-bad' : 'text-muted'}`}><Clock size={12} />{m < 1 ? 'now' : `${m} min`}</span>;
+  const label = m < 1 ? 'now' : m < 60 ? `${m} min` : m < 1440 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${Math.floor(m / 1440)} day${m >= 2880 ? 's' : ''}`;
+  return <span className={`tabular inline-flex items-center gap-1 text-xs font-semibold ${m >= warnAt ? 'text-bad' : 'text-muted'}`}><Clock size={12} />{label}</span>;
 }
 
 export function OrderCard({ o, flash, children, stationId }: { o: Order; flash?: boolean; children?: React.ReactNode; stationId?: string | null }) {
@@ -106,6 +112,12 @@ export function OrderCard({ o, flash, children, stationId }: { o: Order; flash?:
 
 export function OrderButtons({ o, actions, can, onSettle }: { o: Order; actions: ReturnType<typeof useOrderActions>; can: (a: 'pay' | 'cook' | 'deliver' | 'reject') => boolean; onSettle?: (o: Order) => void }) {
   const unpaidPos = o.payStatus === 'unpaid' && o.status !== 'awaiting_payment' && !['cancelled', 'rejected'].includes(o.status);
+  if (needsAccept(o)) return (
+    <>
+      {can('pay') && <Btn size="sm" tone="good" onClick={() => actions.accept(o)}>Accept</Btn>}
+      {(can('reject') || can('pay')) && <Btn size="sm" tone="danger" onClick={() => actions.reject(o)}>Decline</Btn>}
+    </>
+  );
   return (
     <>
       {unpaidPos && can('pay') && onSettle && <Btn size="sm" tone="good" onClick={() => onSettle(o)}>Settle {rupee(o.totalPaise)}</Btn>}

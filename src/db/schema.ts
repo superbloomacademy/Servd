@@ -93,6 +93,7 @@ export type VenueSettings = {
   pauseLastMin: number;         // theaters: stop orders N minutes before the show ends (0 = off)
   showWindowBeforeMin: number;  // theaters: ordering opens N minutes before show start
   roundOff?: boolean;           // round every bill to the nearest rupee (off when missing)
+  approveFirstOrder?: boolean;  // running-bill tables: staff accept a table's first QR order (on when missing)
 };
 export const defaultSettings: VenueSettings = {
   acceptCash: true, unpaidCancelMin: 10, startBeforePayment: false, rescanMinutes: 90,
@@ -258,6 +259,9 @@ export const tableSessions = pgTable('table_sessions', {
   guests: integer('guests').notNull().default(0),
   mergedInto: uuid('merged_into'),
   openedBy: uuid('opened_by'),
+  // Staff saw the guests (accepted the first QR order, or took an order here). Until then QR orders wait, so a photo of the QR can't send food to the kitchen.
+  acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+  acceptedBy: text('accepted_by'),
   utrLast4: text('utr_last4'),
   billNo: integer('bill_no'),
   totalPaise: integer('total_paise'),

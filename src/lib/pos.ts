@@ -82,11 +82,12 @@ export async function createPosOrder(input: {
   const order = await db().transaction(async tx => {
     if (input.type === 'dine_in') {
       if (!session) {
-        [session] = await tx.insert(schema.tableSessions).values({ venueId: venue.id, spotId: spot!.id, guests: Math.max(0, Math.min(99, input.guests || 0)), openedBy: staff.id }).returning();
+        [session] = await tx.insert(schema.tableSessions).values({ venueId: venue.id, spotId: spot!.id, guests: Math.max(0, Math.min(99, input.guests || 0)), openedBy: staff.id, acceptedAt: new Date(), acceptedBy: staff.name }).returning();
       } else {
         const reopen = session.status === 'bill_requested' ? { status: 'open' as const, payStatus: 'unpaid' as const, payMethod: null } : {};
         const guests = input.guests && !session.guests ? { guests: Math.min(99, input.guests) } : {};
-        if (Object.keys(reopen).length || Object.keys(guests).length) await tx.update(schema.tableSessions).set({ ...reopen, ...guests }).where(eq(schema.tableSessions.id, session.id));
+        const seen = session.acceptedAt ? {} : { acceptedAt: new Date(), acceptedBy: staff.name };
+        if (Object.keys(reopen).length || Object.keys(guests).length || Object.keys(seen).length) await tx.update(schema.tableSessions).set({ ...reopen, ...guests, ...seen }).where(eq(schema.tableSessions.id, session.id));
       }
     }
     const { n, date } = await nextNumber(tx, venue.id, 'kot');
@@ -248,7 +249,7 @@ export async function mergeTables(fromId: string, intoId: string, s: Staff) {
     await tx.update(schema.orders).set({ tableSessionId: b.id, spotId: into.id, spotLabel: `Table ${into.label}` }).where(eq(schema.orders.tableSessionId, a.id));
     await tx.update(schema.visits).set({ tableSessionId: b.id, spotId: into.id }).where(eq(schema.visits.tableSessionId, a.id));
     await tx.update(schema.serviceRequests).set({ tableSessionId: b.id, spotId: into.id }).where(eq(schema.serviceRequests.tableSessionId, a.id));
-    await tx.update(schema.tableSessions).set({ guests: a.guests + b.guests }).where(eq(schema.tableSessions.id, b.id));
+    await tx.update(schema.tableSessions).set({ guests: a.guests + b.guests, acceptedAt: b.acceptedAt ?? a.acceptedAt, acceptedBy: b.acceptedBy ?? a.acceptedBy }).where(eq(schema.tableSessions.id, b.id));
     await tx.update(schema.tableSessions).set({ status: 'merged', mergedInto: b.id, closedAt: new Date() }).where(eq(schema.tableSessions.id, a.id));
   });
   await audit(s, { action: 'tables_merged', entity: 'table_session', entityId: b.id, venueId: b.venueId, after: { from: from.label, into: into.label } });

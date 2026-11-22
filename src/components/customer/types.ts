@@ -50,7 +50,7 @@ export type OrderView = {
   fulfilment: 'seat' | 'table' | 'pickup'; deliverAt: 'now' | 'interval'; releaseAt: string | null;
   showLabel: string | null; spotLabel: string; subtotalPaise: number; discountPaise: number; taxPaise: number; totalPaise: number;
   couponCode: string | null; note: string; rejectReason: string | null; timeline: { status: string; at: string; by?: string }[];
-  createdAt: string; tableSessionId: string | null; utrLast4: string | null;
+  createdAt: string; tableSessionId: string | null; utrLast4: string | null; awaitingStaff?: boolean;
   items: { name: string; qty: number; pricePaise: number; veg: boolean }[];
   venue?: { venueName: string; brandColor: string; logoUrl: string | null; vendorName: string };
 };

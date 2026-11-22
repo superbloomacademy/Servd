@@ -296,7 +296,8 @@ async function main() {
   for (const s of srSpots) { const r = await t.post('/api/scan', { code: s.code }); if (r.json?.window?.open && r.json.visit && r.json.tableSessionId) { tv2 = r.json; break; } }
   check('a table is free for the next guest', !!tv2);
   if (tv2) {
-    await t.post('/api/orders', { visitId: tv2.visit.id, lines: [{ itemId: srMenu[0].id, qty: 1 }] });
+    const firstQr = await t.post('/api/orders', { visitId: tv2.visit.id, lines: [{ itemId: srMenu[0].id, qty: 1 }] });
+    check('staff accept the table’s first QR order', (await sr.post(`/api/staff/orders/${firstQr.json?.order?.id}`, { action: 'accept' })).status === 200);
     check('customer calls the waiter', (await t.post('/api/requests', { visitId: tv2.visit.id, kind: 'waiter' })).json?.ok === true);
     const req = (await sr.get(`/api/staff/v/${srVenue}/live`)).json?.requests?.find((r: any) => r.tableSessionId === tv2.tableSessionId && r.kind === 'waiter');
     check('staff see the waiter call', !!req);

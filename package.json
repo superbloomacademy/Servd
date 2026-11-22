@@ -16,7 +16,8 @@
     "vercel-build": "tsx scripts/migrate.ts && next build",
     "test:pos": "tsx tests/pos.ts",
     "test:scroll": "node tests/scroll-audit.mjs",
-    "test:demo": "tsx tests/demo.ts"
+    "test:demo": "tsx tests/demo.ts",
+    "test:ux": "node tests/ux.mjs"
   },
   "dependencies": {
     "cross-env": "7.0.3",

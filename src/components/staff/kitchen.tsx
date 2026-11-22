@@ -11,6 +11,9 @@ import type { Live, Role, VenueCtx } from './types';
 type Station = { id: string; name: string; isLive: boolean };
 type MenuItem = { id: string; name: string; stationId: string | null; isLive: boolean; veg: boolean };
 
+/** Dish name with its add-ons: what the cook has to make. */
+const full = (i: { name: string; addons?: { name: string }[] }) => (i.addons?.length ? `${i.name} + ${i.addons.map(a => a.name).join(', ')}` : i.name);
+
 // Kitchen display: each station sees only its own KOT items. Live/Off for the station's items.
 export function Kitchen({ venue, live, role, myStation, flash, reload }: { venue: VenueCtx; live: Live; role: Role; myStation: string | null; flash: Set<string>; reload: () => void }) {
   const confirm = useConfirm();
@@ -34,7 +37,7 @@ export function Kitchen({ venue, live, role, myStation, flash, reload }: { venue
   const held = live.orders.filter(o => o.kots.some(k => k.status === 'held' && (station === 'all' || k.stationId === station)) && !['cancelled', 'rejected'].includes(o.status)).length;
   const totals = useMemo(() => {
     const m = new Map<string, number>();
-    tickets.forEach(t => t.items.forEach(i => m.set(i.name, (m.get(i.name) || 0) + i.qty)));
+    tickets.forEach(t => t.items.forEach(i => { const n = full(i); m.set(n, (m.get(n) || 0) + i.qty); }));
     return [...m].sort((a, b) => b[1] - a[1]);
   }, [tickets]);
 
@@ -113,7 +116,15 @@ export function Kitchen({ venue, live, role, myStation, flash, reload }: { venue
                 <div className="mt-1 flex items-center gap-2 font-sans"><Age ts={k.createdAt} warnAt={10} /><span className="text-xs text-muted">{clock(k.createdAt)}</span>
                   {o.deliverAt === 'interval' && <Pill tone="brand"><Clapperboard size={12} />Interval</Pill>}{k.status === 'preparing' && <Pill tone="warn">Preparing</Pill>}</div>
                 <ul className="mt-3 space-y-1.5 border-y border-dashed border-line py-3 text-[17px]">
-                  {its.map(i => <li key={i.id} className="flex items-center gap-2"><VegMark veg={i.veg} size={12} /><b className="tabular w-8">{i.qty}×</b><span className="font-sans font-semibold">{i.name}</span></li>)}
+                  {its.map(i => (
+                    <li key={i.id} className="flex items-start gap-2">
+                      <span className="mt-1.5"><VegMark veg={i.veg} size={12} /></span><b className="tabular w-8">{i.qty}×</b>
+                      <span className="min-w-0 flex-1 font-sans font-semibold">{i.name}
+                        {i.addons?.length > 0 && <span className="block text-[15px] font-semibold text-[#1F56C2]">+ {i.addons.map(a => a.name).join(', ')}</span>}
+                        {i.note && <span className="mt-0.5 block rounded-md bg-[#FFF3E0] px-2 py-0.5 text-[15px] font-bold text-[#7A4A00]">{i.note}</span>}
+                      </span>
+                    </li>
+                  ))}
                 </ul>
                 {o.note && <p className="mt-2 flex gap-1.5 font-sans text-sm text-[#7A4A00]"><StickyNote size={15} className="mt-0.5 shrink-0" />{o.note}</p>}
                 <div className="mt-3 flex gap-2 font-sans">
